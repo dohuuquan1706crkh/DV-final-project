@@ -27,7 +27,7 @@ d3.json(GEOJSON_URL).then(world => {
     drawMap(world);
 }).catch(err => {
     console.error('Failed to load GeoJSON:', err);
-    svg.append('text').attr('x',20).attr('y',30).text('Failed to load world GeoJSON');
+    svg.append('text').attr('x',20).attr('y',30).text('Failed to load w``orld GeoJSON');
 });
 
 function drawMap(world) {

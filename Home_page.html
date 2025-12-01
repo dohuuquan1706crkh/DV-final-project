@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>World Map with Search</title>
+  <!-- Link đến CSS -->
+  <link rel="stylesheet" href="css/style.css">
+
+</head>
+<body>
+  <div id="map"></div>
+  
+  <div class="controls">
+    <button id="reset">Reset</button>
+    <button id="zoomIn">Zoom +</button>
+    <button id="zoomOut">Zoom -</button><br>
+    <input id="searchBar" type="text" placeholder="Search country..." />
+  </div>
+  <div id="tooltip" class="tooltip" style="display:none"></div>
+
+  <!-- statistic -->
+  <div id="scatterContainer" style="margin-top:30px;">
+    <svg id="scatterSvg" width="900" height="800"></svg>
+  </div>
+  <input id="yearInput" type="number" value="2020" min="1900" max="2025" />
+  <button id="updateBtn">Update</button>
+
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="js/map.js"></script>
+
+</body>
+</html>

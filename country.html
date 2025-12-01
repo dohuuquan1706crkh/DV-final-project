@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Country Dashboard</title>
+  <style>
+    /* =========================
+   Body & general
+========================= */
+body {
+  font-family: Inter, system-ui, Arial;
+  margin: 0;
+  padding: 20px;
+  background: #f9f9f9;
+  text-align: center;
+}
+
+/* =========================
+   Chart container 2x2 grid
+========================= */
+#chartContainer {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* 2 cột */
+  grid-template-rows: repeat(2, 1fr);    /* 2 hàng */
+  gap: 20px;
+  max-width: 100%;
+  height: 100vh; /* vừa màn hình */
+}
+
+/* =========================
+   Chart box
+========================= */
+.chart-box {
+  background: white;
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+
+  display: flex;
+  flex-direction: column; /* xếp title trên */
+  justify-content: flex-start;
+  align-items: center;
+  overflow: hidden;
+}
+
+#countryTitle {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+/* =========================
+   Chart title
+========================= */
+.chart-box .chart-title {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+/* =========================
+   SVG charts scale
+========================= */
+.chart-box svg {
+  width: 100%;
+  height: 100%;
+  flex-grow: 1; /* chiếm hết phần còn lại của box */
+}
+
+/* =========================
+   Back button
+========================= */
+#back {
+  display: inline-block;
+  margin-bottom: 15px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+#back:hover {
+  background: #0056b3;
+}
+
+
+</style>
+
+  </style>
+</head>
+<body>
+     <h1 id="countryTitle"></h1>
+  <!-- <button id="back" onclick="window.location.href='index.html'">← Back to World Map</button> -->
+  <div id="chartContainer">
+  <div class="chart-box">
+    <h2 id="pyramidTitle">Population Pyramid</h2>
+    <div id="pyramidChart"></div>
+  </div>
+  <div class="chart-box">
+    <h2 id="gdpTitle">GDP over the years</h2>
+    <div id="gdpChart"></div>
+  </div>
+  <div class="chart-box">
+    <h2 id="emissionTitle">CO₂ Emission Details</h2>
+    <div id="emissionChart"></div>
+  </div>
+  <div class="chart-box">
+    <h2 id="co2Title">CO2 per USD</h2>
+    <div id="co2Chart"></div>
+  </div>
+</div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="countryChart.js"></script>
+  <script>
+    // === Lấy tên quốc gia từ URL ===
+    const params = new URLSearchParams(window.location.search);
+    const countryName = params.get('name');
+
+    if (countryName) {
+        document.getElementById("countryTitle").innerText = countryName;
+      showCharts(countryName);
+    } else {
+      document.getElementById('chartContainer').innerText = 'No country specified.';
+    }
+  </script>
+</body>
+</html>

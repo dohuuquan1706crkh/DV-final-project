@@ -268,11 +268,36 @@ function drawScatterForYear(year, section = "economy") {
         .attr("transform", `translate(0,${height - margin.bottom})`)
         .transition(t)
         .call(d3.axisBottom(x).ticks(10, "~s"));
+        
 
     yAxisG
         .attr("transform", `translate(${margin.left},0)`)
         .transition(t)
         .call(d3.axisLeft(y));
+
+        // Label trục X
+    xAxisG.selectAll(".axis-label").remove();
+    xAxisG.append("text")
+        .attr("class", "axis-label")
+        .attr("x", (width - margin.left - margin.right)/2 + margin.left)
+        .attr("y", 40) // cách trục X 50px
+        .attr("text-anchor", "middle")
+        .attr("fill", "black")
+        .style("font-size", "16px")
+        .text(labelX);
+
+    // Label trục Y
+    yAxisG.selectAll(".axis-label").remove();
+    yAxisG.append("text")
+        .attr("class", "axis-label")
+        .attr("transform", `rotate(-90)`)
+        .attr("x", -(height - margin.top - margin.bottom)/2 - margin.top)
+        .attr("y", -40) // cách trục Y 60px sang trái
+        .attr("text-anchor", "middle")
+        .attr("fill", "black")
+        .style("font-size", "16px")
+        .text(labelY);
+
 
     // Title
     titleG
@@ -312,7 +337,9 @@ function drawScatterForYear(year, section = "economy") {
         .attr("clip-path", d => `url(#clip-${d.code})`)
         .attr("preserveAspectRatio", "xMidYMid slice");
 
-    pointsEnter.select("image")
+    // Rebind the new data
+    const allPoints = pointsEnter.merge(points);
+    allPoints.select("image")
         .on("mouseover", (event, d) => {
             tooltip.style("display", "block")
                 .html(`<strong>${d.name}</strong><br>${labelX}: ${d.xVal}<br>${labelY}: ${d.yVal}`);

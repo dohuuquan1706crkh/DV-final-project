@@ -4,133 +4,158 @@ const AGE_GROUPS = [
   "70-74","75-79","80_and_above"
 ];
 async function showCharts(countryName) {
-    // loadPopulationDataAndDraw(countryName);
-    drawGDPChart(countryName);
-    drawCO2Chart(countryName);
-    drawEmissionChart(countryName);
+  await drawPopulationPyramid(countryName);
+  await drawGDPChart(countryName);
+  await drawCO2Chart(countryName);
+  await drawEmissionChart(countryName);
 }
 
-async function loadPopulationDataAndDraw(countryName) {
-  const container = d3.select("#pyramidContainer");
-  const title = d3.select("#pyramidTitle");
-  const chartDiv = d3.select("#pyramidChart");
-  chartDiv.selectAll("*").remove();
-  title.text(`Population Pyramid - ${countryName}`);
-  container.style("display", "block");
+async function drawPopulationPyramid(countryName) {
+  const pyramidDiv = d3.select("#pyramidChart");
+  pyramidDiv.selectAll("*").remove(); // Clear existing chart
 
-  // Mảng dữ liệu cuối cùng
-  const mergedData = [];
-
-  for (const age of AGE_GROUPS) {
-    const maleFile = `Dataset/Health/Health_Population_ages_${age}_male_of_male_population.csv`;
-    const femaleFile = `Dataset/Health/Health_Population_ages_${age}_female_of_female_population.csv`;
-
-    try {
-      const [maleData, femaleData] = await Promise.all([
-        d3.csv(maleFile),
-        d3.csv(femaleFile)
-      ]);
-
-      // Giả sử mỗi file có cấu trúc: Country, Value
-      const maleRow = maleData.find(d => d.Country === countryName);
-      const femaleRow = femaleData.find(d => d.Country === countryName);
-
-      if (maleRow && femaleRow) {
-        mergedData.push({
-          age: age.replace("_and_above", "+").replace("_", "-"),
-          male: +maleRow.Value || 0,
-          female: +femaleRow.Value || 0
-        });
-      }
-    } catch (e) {
-      console.warn("Error loading:", age, e);
-    }
+  try {
+    // Load the data from all age group CSV files
+    const rawData = await Promise.all(
+    AGE_GROUPS.map(ageGroup =>
+        d3.csv(`DataSet/Health/Health_Population_ages_${ageGroup}_male_of_male_population.csv`)
+            .then(data => ({ ageGroup, data }))  // Include the ageGroup with the data
+    )
+);
+    // Transform the data for the pyramid chart
+    const pyramidData = transformDataForPopulationPyramid(rawData, countryName);
+    createPopulationChart(pyramidData);
+  } catch (err) {
+    console.error("Error loading population dat:", err);
+    pyramidDiv.append("p").text("Failed to load population data.");
   }
-
-  if (mergedData.length === 0) {
-    chartDiv.append("p").text("No population data found for this country.");
-    return;
-  }
-
-  drawPopulationPyramid(mergedData);
 }
 
-function drawPopulationPyramid(data) {
-  const margin = {top: 20, right: 20, bottom: 30, left: 20};
-  const width = 360 - margin.left - margin.right;
-  const height = 280 - margin.top - margin.bottom;
+function transformDataForPopulationPyramid(file, countryName) {
+    console.log("file");
+    console.log(file);
+    let pyramidData = []; 
+    file.forEach(function(index) {
+        // Find the country row within this dataset
+        const result = file.map(group => {
 
-  const svg = d3.select("#pyramidChart")
-    .append("svg")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
-    .append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
-
-  const maxValue = d3.max(data, d => Math.max(d.male, d.female));
-
-  const x = d3.scaleLinear()
-    .domain([0, maxValue])
-    .range([0, width / 2])
-    .nice();
-
-  const y = d3.scaleBand()
-    .domain(data.map(d => d.age))
-    .range([height, 0])
-    .padding(0.1);
-
-  // Nam (bên trái)
-  svg.selectAll(".bar.male")
-    .data(data)
-    .enter()
-    .append("rect")
-      .attr("class", "bar male")
-      .attr("x", d => width/2 - x(d.male))
-      .attr("y", d => y(d.age))
-      .attr("width", d => x(d.male))
-      .attr("height", y.bandwidth())
-      .attr("fill", "#4f81bd");
-
-  // Nữ (bên phải)
-  svg.selectAll(".bar.female")
-    .data(data)
-    .enter()
-    .append("rect")
-      .attr("class", "bar female")
-      .attr("x", width/2)
-      .attr("y", d => y(d.age))
-      .attr("width", d => x(d.female))
-      .attr("height", y.bandwidth())
-      .attr("fill", "#c0504d");
-
-  // Trục giữa
-  svg.append("line")
-    .attr("x1", width / 2)
-    .attr("x2", width / 2)
-    .attr("y1", 0)
-    .attr("y2", height)
-    .attr("stroke", "#000");
-
-  // Trục Y (tuổi)
-  svg.append("g")
-    .attr("transform", `translate(${width/2},0)`)
-    .call(d3.axisRight(y).tickSize(0))
-    .selectAll("text")
-    .style("text-anchor", "middle");
-
-  // Nhãn
-  svg.append("text")
-    .attr("x", width / 4)
-    .attr("y", height + 20)
-    .attr("text-anchor", "middle")
-    .text("Male");
-
-  svg.append("text")
-    .attr("x", width * 3/4)
-    .attr("y", height + 20)
-    .attr("text-anchor", "middle")
-    .text("Female");
+            const dataOverYear = group.data.find(d => d["Country Name"] === countryName);
+            if (dataOverYear) {
+                return { dataOverYear, ageGroup: group.ageGroup };
+            }
+            return null; 
+        })
+        .filter(item => item !== null); 
+        pyramidData.push(result);
+    });
+    return pyramidData[0];  // Return the transformed data
 }
+
+function createPopulationChart(countryData) {
+  console.log("countryDataa");
+  console.log(countryData);
+  const margin = {top: 20, right: 40, bottom: 50, left: 70};
+  const width = 700 - margin.left - margin.right;
+  const height = 400 - margin.top - margin.bottom;
+
+  const svgEl = d3.select("#pyramidChart");
+   const ctx = {
+    hmargin: 20,
+    vmargin: 5,
+    yearAxisHeight: 30,
+    totalStripPlotHeight: 500,
+    GREY_NULL: "#ccc",
+    crossSeriesTempExtent: [0, 100], // Adjust based on your data range
+    timeParser: d3.timeParse("%Y"),
+    REFERENCE_YEAR: "2020"
+};
+// Get the min and max value for color scale
+ctx.crossSeriesTempExtent = [
+    d3.min(countryData, (d) => d3.min(d, (item) => item.value)),  // Assuming each item in d has a 'value' key
+    d3.max(countryData, (d) => d3.max(d, (item) => item.value))   // Same assumption for max value
+];
+console.log("**");
+console.log(ctx.crossSeriesTempExtent[0]);
+
+// Color scale based on values
+ctx.color = d3.scaleLinear()
+    .domain([ctx.crossSeriesTempExtent[0], 0, ctx.crossSeriesTempExtent[1]])
+    .range(["rgb(0, 51, 255)", "#f5f5f5", "rgb(255, 57, 57)"]);
+
+// Define the height of each strip for each age group
+ctx.STRIP_H = (ctx.totalStripPlotHeight - ctx.yearAxisHeight) / countryData.length;
+
+// Loop over each dataset in result (each corresponding to a different age group)
+countryData.forEach(function(d, i) {
+    console.log("****");
+    console.log(d);
+    let mapG = svgEl.append("g")
+        .classed("plot", true)
+        .attr("transform", `translate(${ctx.hmargin},${i * ctx.STRIP_H})`);
+    
+    // Create lines for each country's values for this age group
+    mapG.selectAll("line")
+        .data(d.dataOverYear)
+        .enter()
+        .append("line")
+        .attr("x1", (d, j) => ctx.timeParser(d.dataOverYear))  // Assuming `year` is a key in country data
+        .attr("y1", ctx.vmargin)
+        .attr("x2", (d, j) => ctx.timeParser(d.dataOverYear))  // Same as x1
+        .attr("y2", ctx.STRIP_H - ctx.vmargin)
+        .attr("stroke", (d) => (d.value == null ? ctx.GREY_NULL : ctx.color(d.value)))  // Color by value
+        .attr("stroke-width", 2);
+
+    // Add age group label
+    mapG.append("text")
+        .attr("x", d.country.length + 2 * ctx.hmargin)
+        .attr("y", ctx.STRIP_H - ctx.vmargin - 3)
+        .text(d.ageGroup);
+});
+
+// Time axis
+let timeScale = d3.scaleTime()
+    .domain(d3.extent(countryData[0].country, (d) => ctx.timeParser(d.year)))  // Assuming all countries have same year range
+    .rangeRound([0, countryData[0].country.length - 1]);
+
+svgEl.append("g")
+    .attr("id", "yearAxis")
+    .attr("transform", `translate(${ctx.hmargin},${ctx.totalStripPlotHeight - ctx.yearAxisHeight})`)
+    .call(d3.axisBottom(timeScale).ticks(d3.timeYear.every(5)));
+
+// Legend for values (temperature in the original example)
+let tempRange4legend = d3.range(ctx.crossSeriesTempExtent[0], ctx.crossSeriesTempExtent[1], 0.15).reverse();
+let scale4tempLegend = d3.scaleLinear()
+    .domain(ctx.crossSeriesTempExtent)
+    .rangeRound([tempRange4legend.length, 0]);
+
+let legendG = svgEl.append("g")
+    .attr("id", "tempScale")
+    .attr("opacity", 1)
+    .attr("transform", `translate(1000,${ctx.totalStripPlotHeight / 2 - tempRange4legend.length / 2})`);
+
+legendG.selectAll("line")
+    .data(tempRange4legend)
+    .enter()
+    .append("line")
+    .attr("x1", 0)
+    .attr("y1", (d, j) => (j))
+    .attr("x2", ctx.STRIP_H)
+    .attr("y2", (d, j) => (j))
+    .attr("stroke", (d) => (ctx.color(d)));
+
+// Add axis for the legend
+legendG.append("g")
+    .attr("transform", `translate(${ctx.STRIP_H + 4},0)`)
+    .call(d3.axisRight(scale4tempLegend).ticks(5));
+
+// Add legend label
+legendG.append("text")
+    .attr("x", 40)
+    .attr("y", tempRange4legend.length / 2)
+    .style("fill", "#aaa")
+    .text(`(Reference: ${ctx.REFERENCE_YEAR})`);
+}
+
 
 async function drawGDPChart(countryName) {
   const gdpDiv = d3.select("#gdpChart");
@@ -138,7 +163,6 @@ async function drawGDPChart(countryName) {
 
   try {
     const data = await d3.csv("Dataset/Economy/Economy_GDP(current US$).csv");
-
     const countryData = data.find(d => d["Country Name"] === countryName);
     if (!countryData) {
       gdpDiv.append("p").text("No GDP data found for this country.");
@@ -186,12 +210,16 @@ async function drawGDPChart(countryName) {
       .y(d => y(d.value))
       .curve(d3.curveMonotoneX);
 
-    svg.append("path")
+    const path = svg.append("path")
       .datum(gdpValues)
       .attr("fill", "none")
       .attr("stroke", "#28a745")
       .attr("stroke-width", 2.5)
       .attr("d", line);
+
+    path.transition()
+      .duration(500) // 1.5 seconds for transition duration
+      .ease(d3.easeCubicOut); // Ease function for smooth transition
 
     svg.selectAll(".dot")
       .data(gdpValues)
@@ -199,7 +227,11 @@ async function drawGDPChart(countryName) {
       .attr("cx", d => x(d.year))
       .attr("cy", d => y(d.value))
       .attr("r", 3)
-      .attr("fill", "#28a745");
+      .attr("fill", "#28a745")
+      .transition()
+      .duration(500)
+      .delay((d, i) => i * 50)
+      .attr("opacity", 1);
 
     svg.append("g")
       .attr("transform", `translate(0,${height})`)

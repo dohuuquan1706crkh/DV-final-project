@@ -1,8 +1,10 @@
 const AGE_GROUPS = [
   "00-04","05-09","10-14","15-19","20-24","25-29","30-34",
   "35-39","40-44","45-49","50-54","55-59","60-64","65-69",
-  "70-74","75-79","80_and_above"
+  "70-74","75-79","80+"
 ];
+
+const ctx = {};
 async function showCharts(countryName) {
   await drawPopulationPyramid(countryName);
   await drawGDPChart(countryName);
@@ -10,28 +12,103 @@ async function showCharts(countryName) {
   await drawEmissionChart(countryName);
 }
 
+// ----------------------------
+// Population pyramid chart
+// ----------------------------
+
+// async function drawPopulationPyramid(countryName) {
+//   const pyramidDiv = d3.select("#pyramidChart");
+//   pyramidDiv.selectAll("*").remove(); // Clear existing chart
+
+//   try {
+//     // Load the data from all age group CSV files
+//     const rawData = await Promise.all(
+//     AGE_GROUPS.map(ageGroup =>
+//         d3.csv(`DataSet/Health/Health_Population_ages_${ageGroup}_male_of_male_population.csv`)
+//             .then(data => ({ ageGroup, data }))  // Include the ageGroup with the data
+//         )
+//     );
+//     // Transform the data for the pyramid chart
+//     console.log("rawData");
+//     console.log(rawData);
+//     const pyramidData = transformDataForPopulationPyramid(rawData, countryName);
+//     createPopulationChart(pyramidData);
+//   } catch (err) {
+//     console.error("Error loading population dat:", err);
+//     pyramidDiv.append("p").text("Failed to load population data.");
+//   }
+// }
+
 async function drawPopulationPyramid(countryName) {
   const pyramidDiv = d3.select("#pyramidChart");
   pyramidDiv.selectAll("*").remove(); // Clear existing chart
 
   try {
-    // Load the data from all age group CSV files
+    // Load male + female data cho tất cả age groups
     const rawData = await Promise.all(
-    AGE_GROUPS.map(ageGroup =>
-        d3.csv(`DataSet/Health/Health_Population_ages_${ageGroup}_male_of_male_population.csv`)
-            .then(data => ({ ageGroup, data }))  // Include the ageGroup with the data
-    )
-);
-    // Transform the data for the pyramid chart
-    const pyramidData = transformDataForPopulationPyramid(rawData, countryName);
-    createPopulationChart(pyramidData);
+      AGE_GROUPS.map(async ageGroup => {
+        const [maleData, femaleData] = await Promise.all([
+          d3.csv(`DataSet/Health/Health_Population_ages_${ageGroup === "80+" ? "80_and_above" : ageGroup}_male_of_male_population.csv`),
+          d3.csv(`DataSet/Health/Health_Population_ages_${ageGroup === "80+" ? "80_and_above" : ageGroup}_female_of_female_population.csv`)
+        ]);
+
+        // Tạo array mới với trung bình phần trăm male/female
+        const combinedData = maleData.map((row, i) => {
+          const femaleRow = femaleData[i];
+          const combinedRow = { ...row };
+          Object.keys(row).forEach(key => {
+            if (!isNaN(+row[key]) && !isNaN(+femaleRow[key])) {
+              combinedRow[key] = (parseFloat(row[key]) + parseFloat(femaleRow[key])) / 2;
+            }
+          });
+          return combinedRow;
+        });
+
+        return {
+          ageGroup,
+          male: maleData,
+          female: femaleData,
+          total: combinedData
+        };
+      })
+    );
+
+    // Vẽ time serie cho các năm
+    const totalData = rawData.map(group => ({
+      ageGroup: group.ageGroup,
+      data: group.total
+    }));
+
+    // console.log("total data");
+    // console.log(totalData);
+
+    ctx.heatData = transformDataForHeatmap(totalData, countryName);
+    createHeatMap(ctx.heatData);
+
+    // Vẽ cho một năm biểu đồ piramid
+
+    ctx.genderData = rawData.map(group => ({
+      ageGroup: group.ageGroup,
+      male: group.male,
+      female: group.female
+    }));
+
+    const pyramidData = transformDataForPyramid(ctx.genderData, countryName, 2020);
+    // createPyramidData(pyramidData);
+    initPyramidChart();
+    updatePyramidData(pyramidData);
+
   } catch (err) {
-    console.error("Error loading population dat:", err);
+    console.error("Error loading population data:", err);
     pyramidDiv.append("p").text("Failed to load population data.");
   }
 }
 
-function transformDataForPopulationPyramid(file, countryName) {
+// ----------------------------
+// Heat chart
+// ----------------------------
+
+function transformDataForHeatmap(file, countryName) {
     console.log("file");
     console.log(file);
     let pyramidData = []; 
@@ -51,111 +128,298 @@ function transformDataForPopulationPyramid(file, countryName) {
     return pyramidData[0];  // Return the transformed data
 }
 
-function createPopulationChart(countryData) {
+function createHeatMap(countryData) {
   console.log("countryDataa");
   console.log(countryData);
-  const margin = {top: 20, right: 40, bottom: 50, left: 70};
-  const width = 700 - margin.left - margin.right;
-  const height = 400 - margin.top - margin.bottom;
+  // Chuyển dữ liệu từ object -> array để dễ vẽ
+    const data = [];
+    countryData.forEach(d => {
+        const age = d.ageGroup;
+        for (const year in d.dataOverYear) {
+            if (year !== "" && d.dataOverYear[year] !== "") {
+                data.push({
+                    year: +year,
+                    ageGroup: age,
+                    value: +d.dataOverYear[year]
+                });
+            }
+        }
+    });
 
-  const svgEl = d3.select("#pyramidChart");
-   const ctx = {
-    hmargin: 20,
-    vmargin: 5,
-    yearAxisHeight: 30,
-    totalStripPlotHeight: 500,
-    GREY_NULL: "#ccc",
-    crossSeriesTempExtent: [0, 100], // Adjust based on your data range
-    timeParser: d3.timeParse("%Y"),
-    REFERENCE_YEAR: "2020"
-};
-// Get the min and max value for color scale
-ctx.crossSeriesTempExtent = [
-    d3.min(countryData, (d) => d3.min(d, (item) => item.value)),  // Assuming each item in d has a 'value' key
-    d3.max(countryData, (d) => d3.max(d, (item) => item.value))   // Same assumption for max value
-];
-console.log("**");
-console.log(ctx.crossSeriesTempExtent[0]);
+    // Kích thước chart
+    const margin = { top: 50, right: 110, bottom: 50, left: 80 },
+          width = 800 - margin.left - margin.right,
+          height = 500 - margin.top - margin.bottom;
 
-// Color scale based on values
-ctx.color = d3.scaleLinear()
-    .domain([ctx.crossSeriesTempExtent[0], 0, ctx.crossSeriesTempExtent[1]])
-    .range(["rgb(0, 51, 255)", "#f5f5f5", "rgb(255, 57, 57)"]);
+    const legendWidth = 20;
+    const legendHeight = 200;
 
-// Define the height of each strip for each age group
-ctx.STRIP_H = (ctx.totalStripPlotHeight - ctx.yearAxisHeight) / countryData.length;
+    // Tạo SVG
+    const svg = d3.select("#pyramidHeatmap")
+                  .append("svg")
+                  .attr("width", width + margin.left + margin.right)
+                  .attr("height", height + margin.top + margin.bottom)
+                  .append("g")
+                  .attr("transform", `translate(${margin.left},${margin.top})`);
 
-// Loop over each dataset in result (each corresponding to a different age group)
-countryData.forEach(function(d, i) {
-    console.log("****");
-    console.log(d);
-    let mapG = svgEl.append("g")
-        .classed("plot", true)
-        .attr("transform", `translate(${ctx.hmargin},${i * ctx.STRIP_H})`);
-    
-    // Create lines for each country's values for this age group
-    mapG.selectAll("line")
-        .data(d.dataOverYear)
+    // Lấy danh sách năm và nhóm tuổi
+    const years = Array.from(new Set(data.map(d => d.year))).sort((a,b) => a-b);
+    const ageGroups = Array.from(new Set(data.map(d => d.ageGroup))).reverse();
+
+    // Scale trục hoành (năm)
+    const x = d3.scaleBand()
+                .domain(years)
+                .range([0, width])
+                .padding(0.05);
+
+    // Scale trục tung (ageGroup)
+    const y = d3.scaleBand()
+                .domain(ageGroups)
+                .range([0, height])
+                .padding(0.05);
+
+    // Scale màu theo population
+    const color = d3.scaleSequential()
+                    .interpolator(d3.interpolateYlOrRd)
+                    .domain(d3.extent(data, d => d.value));
+
+    // Thêm trục
+    svg.append("g")
+       .attr("transform", `translate(0, ${height})`)
+       .call(d3.axisBottom(x).tickValues(x.domain().filter((d,i) => !(i%5)))); // mỗi 5 năm
+       
+    svg.append("g")
+       .call(d3.axisLeft(y));
+
+    // Vẽ các ô heatmap
+    svg.selectAll()
+       .data(data)
+       .enter()
+       .append("rect")
+       .attr("x", d => x(d.year))
+       .attr("y", d => y(d.ageGroup))
+       .attr("width", x.bandwidth())
+       .attr("height", y.bandwidth())
+       .style("fill", d => color(d.value))
+       .append("title") // tooltip
+       .text(d => `${d.ageGroup} (${d.year}): ${d.value}`);
+
+    // legend
+    const legendGroup = svg.append("g")
+    .attr("transform", `translate(${width + 40}, ${(height - legendHeight) / 2})`);
+    const defs = svg.append("defs");
+
+    const linearGradient = defs.append("linearGradient")
+        .attr("id", "legend-gradient")
+        .attr("x1", "0%")
+        .attr("y1", "100%")
+        .attr("x2", "0%")
+        .attr("y2", "0%");
+
+    linearGradient.selectAll("stop")
+        .data(d3.ticks(0, 1, 10))
         .enter()
-        .append("line")
-        .attr("x1", (d, j) => ctx.timeParser(d.dataOverYear))  // Assuming `year` is a key in country data
-        .attr("y1", ctx.vmargin)
-        .attr("x2", (d, j) => ctx.timeParser(d.dataOverYear))  // Same as x1
-        .attr("y2", ctx.STRIP_H - ctx.vmargin)
-        .attr("stroke", (d) => (d.value == null ? ctx.GREY_NULL : ctx.color(d.value)))  // Color by value
-        .attr("stroke-width", 2);
+        .append("stop")
+        .attr("offset", d => `${d * 100}%`)
+        .attr("stop-color", d =>
+            color(
+                d3.interpolate(
+                    color.domain()[0],
+                    color.domain()[1]
+                )(d)
+            )
+        );
 
-    // Add age group label
-    mapG.append("text")
-        .attr("x", d.country.length + 2 * ctx.hmargin)
-        .attr("y", ctx.STRIP_H - ctx.vmargin - 3)
-        .text(d.ageGroup);
-});
+    legendGroup.append("rect")
+    .attr("width", legendWidth)
+    .attr("height", legendHeight)
+    .style("fill", "url(#legend-gradient)");
 
-// Time axis
-let timeScale = d3.scaleTime()
-    .domain(d3.extent(countryData[0].country, (d) => ctx.timeParser(d.year)))  // Assuming all countries have same year range
-    .rangeRound([0, countryData[0].country.length - 1]);
+    const legendScale = d3.scaleLinear()
+    .domain(color.domain())
+    .range([legendHeight, 0]);
 
-svgEl.append("g")
-    .attr("id", "yearAxis")
-    .attr("transform", `translate(${ctx.hmargin},${ctx.totalStripPlotHeight - ctx.yearAxisHeight})`)
-    .call(d3.axisBottom(timeScale).ticks(d3.timeYear.every(5)));
+    const legendAxis = d3.axisRight(legendScale)
+        .ticks(6);
 
-// Legend for values (temperature in the original example)
-let tempRange4legend = d3.range(ctx.crossSeriesTempExtent[0], ctx.crossSeriesTempExtent[1], 0.15).reverse();
-let scale4tempLegend = d3.scaleLinear()
-    .domain(ctx.crossSeriesTempExtent)
-    .rangeRound([tempRange4legend.length, 0]);
+    legendGroup.append("g")
+        .attr("transform", `translate(${legendWidth}, 0)`)
+        .call(legendAxis);
 
-let legendG = svgEl.append("g")
-    .attr("id", "tempScale")
-    .attr("opacity", 1)
-    .attr("transform", `translate(1000,${ctx.totalStripPlotHeight / 2 - tempRange4legend.length / 2})`);
-
-legendG.selectAll("line")
-    .data(tempRange4legend)
-    .enter()
-    .append("line")
-    .attr("x1", 0)
-    .attr("y1", (d, j) => (j))
-    .attr("x2", ctx.STRIP_H)
-    .attr("y2", (d, j) => (j))
-    .attr("stroke", (d) => (ctx.color(d)));
-
-// Add axis for the legend
-legendG.append("g")
-    .attr("transform", `translate(${ctx.STRIP_H + 4},0)`)
-    .call(d3.axisRight(scale4tempLegend).ticks(5));
-
-// Add legend label
-legendG.append("text")
-    .attr("x", 40)
-    .attr("y", tempRange4legend.length / 2)
-    .style("fill", "#aaa")
-    .text(`(Reference: ${ctx.REFERENCE_YEAR})`);
+    legendGroup.append("text")
+    .attr("x", legendWidth / 2)
+    .attr("y", -10)
+    .attr("text-anchor", "middle")
+    .style("font-size", "12px")
+    .style("font-weight", "bold")
+    .text("Population (%)");
 }
 
+// ----------------------------
+// Pyramid chart
+// ----------------------------
+
+function transformDataForPyramid(file, countryName, year) {
+    console.log("file");
+    console.log(file);
+    return file
+        .map(group => {
+            const maleRow = group.male.find(
+                d => d["Country Name"] === countryName
+            );
+            const femaleRow = group.female.find(
+                d => d["Country Name"] === countryName
+            );
+
+            if (!maleRow || !femaleRow) return null;
+
+            return {
+                ageGroup: group.ageGroup,
+                male: +maleRow[year],     // 🔥 lọc theo năm
+                female: +femaleRow[year]  // 🔥 lọc theo năm
+            };
+        })
+        .filter(d => d !== null);
+}
+
+let pyramidSvg, xScale, yScale, width, height;
+
+function initPyramidChart() {
+  const container = d3.select("#pyramidChart");
+  container.selectAll("*").remove();
+
+  const margin = { top: 50, right: 30, bottom: 75, left: 40 };
+  width = 420 - margin.left - margin.right;
+  height = 500 - margin.top - margin.bottom;
+
+  pyramidSvg = container
+    .append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  xScale = d3.scaleLinear().range([0, width]);
+  yScale = d3.scaleBand().range([height, 0]).padding(0.1);
+
+  pyramidSvg.append("g")
+    .attr("class", "x-axis")
+    .attr("transform", `translate(0,${height})`);
+
+  pyramidSvg.append("g")
+    .attr("class", "y-axis");
+
+  // center line
+  // pyramidSvg.append("line")
+  //   .attr("class", "center-line")
+  //   .attr("y1", 0)
+  //   .attr("y2", height)
+  //   .attr("stroke", "#000");
+
+  // labels
+  pyramidSvg.append("text")
+    .attr("class", "label male")
+    .attr("x", width * 0.25)
+    .attr("y", -5)
+    .attr("text-anchor", "middle")
+    .text("Male");
+
+  pyramidSvg.append("text")
+    .attr("class", "label female")
+    .attr("x", width * 0.75)
+    .attr("y", -5)
+    .attr("text-anchor", "middle")
+    .text("Female");
+}
+
+function updatePyramidData(pyramidData) {
+
+  const data = pyramidData.map(d => ({
+    ageGroup: d.ageGroup,
+    male: -d.male,
+    female: d.female
+  }));
+
+  const maxValue = d3.max(pyramidData, d => Math.max(d.male, d.female));
+
+  xScale.domain([-maxValue, maxValue]);
+  yScale.domain(data.map(d => d.ageGroup));
+
+  // ===== AXIS TRANSITION =====
+  pyramidSvg.select(".x-axis")
+    .transition()
+    .duration(800)
+    .call(d3.axisBottom(xScale).ticks(5).tickFormat(d => Math.abs(d)));
+
+  pyramidSvg.select(".y-axis")
+    .transition()
+    .duration(800)
+    .call(d3.axisLeft(yScale));
+
+  pyramidSvg.select(".center-line")
+    .transition()
+    .duration(800)
+    .attr("x1", xScale(0))
+    .attr("x2", xScale(0));
+
+  // ===== MALE =====
+  pyramidSvg.selectAll(".bar.male")
+    .data(data, d => d.ageGroup)
+    .join(
+      enter => enter.append("rect")
+        .attr("class", "bar male")
+        .attr("y", d => yScale(d.ageGroup))
+        .attr("height", yScale.bandwidth())
+        .attr("x", xScale(0))
+        .attr("width", 0)
+        .attr("fill", "#4e79a7")
+        .call(enter => enter.transition().duration(800)
+          .attr("x", d => xScale(d.male))
+          .attr("width", d => xScale(0) - xScale(d.male))
+        ),
+
+      update => update.transition().duration(800)
+        .attr("y", d => yScale(d.ageGroup))
+        .attr("x", d => xScale(d.male))
+        .attr("width", d => xScale(0) - xScale(d.male))
+        .attr("height", yScale.bandwidth())
+    );
+
+  // ===== FEMALE =====
+  pyramidSvg.selectAll(".bar.female")
+    .data(data, d => d.ageGroup)
+    .join(
+      enter => enter.append("rect")
+        .attr("class", "bar female")
+        .attr("y", d => yScale(d.ageGroup))
+        .attr("height", yScale.bandwidth())
+        .attr("x", xScale(0))
+        .attr("width", 0)
+        .attr("fill", "#e15759")
+        .call(enter => enter.transition().duration(800)
+          .attr("width", d => xScale(d.female) - xScale(0))
+        ),
+
+      update => update.transition().duration(800)
+        .attr("y", d => yScale(d.ageGroup))
+        .attr("x", xScale(0))
+        .attr("width", d => xScale(d.female) - xScale(0))
+        .attr("height", yScale.bandwidth())
+    );
+}
+
+document.getElementById("updateBtn-pyramid").addEventListener("click", () => {
+  const raw = parseInt(document.getElementById("yearInput-pyramid").value);
+  const year = Number.isFinite(raw) ? raw : 2020;
+
+  const pyramidData = transformDataForPyramid(ctx.genderData, countryName, year);
+  updatePyramidData(pyramidData);
+});
+
+
+// ----------------------------
+// GDP chart
+// ----------------------------
 
 async function drawGDPChart(countryName) {
   const gdpDiv = d3.select("#gdpChart");
@@ -258,6 +522,10 @@ async function drawGDPChart(countryName) {
   }
 }
 
+// ----------------------------
+// Co2 chart
+// ----------------------------
+
 async function drawCO2Chart(countryName) {
   const co2Div = d3.select("#co2Chart");
   co2Div.selectAll("*").remove();
@@ -343,6 +611,10 @@ async function drawCO2Chart(countryName) {
     co2Div.append("p").text("Failed to load CO₂ data.");
   }
 }
+
+// ----------------------------
+// emission chart
+// ----------------------------
 
 async function drawEmissionChart(countryName) {
   const emissionDiv = d3.select("#emissionChart");

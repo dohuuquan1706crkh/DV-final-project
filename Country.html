@@ -90,9 +90,17 @@
     <div class="tab-content" id="chartTabsContent">
       <!-- Population Tab -->
       <div class="tab-pane fade show active" id="population" role="tabpanel" aria-labelledby="population-tab">
+
         <div class="chart-box">
           <h3>Population Pyramid</h3>
-          <div id="pyramidChart"></div>
+          <div style="display:flex; gap:50px;">
+            <div id="pyramidHeatmap"></div>
+            <div>
+              <input id="yearInput-pyramid" type="number" value="2020" min="1900" max="2025" />
+              <button id="updateBtn-pyramid">Update</button>
+              <div id="pyramidChart"></div>
+            </div>
+          </div>
         </div>
         <div class="chart-box">
           <h3>GDP over the Years</h3>

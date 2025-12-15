@@ -178,12 +178,45 @@ function drawPopulationPacking(year) {
         .attr("stroke-width", 1.5);;
 
     // Tooltip
-    nodes.append("title")
-        .text(d => `${d.data.name}\nPopulation: ${d.data.population.toLocaleString()}`);
+    // nodes.append("title")
+    //     .text(d => `${d.data.name}\nPopulation: ${d.data.population.toLocaleString()}`);
+
+    nodes.on("mouseover", (event, d) => {
+            tooltip.style("display", "block")
+                .html(`<strong>${d.data.name}</strong><br>Population: ${d.data.population.toLocaleString()}`);
+        })
+        .on("mousemove", (event) => {
+            tooltip.style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY + 10) + "px");
+        })
+        .on("mouseout", () => tooltip.style("display", "none"));
 }
 
 // ----------------------------------------
-// DRAW GDP
+// Linear regression
+// ----------------------------------------
+
+function linearRegression(data) {
+    const n = data.length;
+    if (n < 2) return null;
+
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+
+    data.forEach(d => {
+        sumX += d.xVal;
+        sumY += d.yVal;
+        sumXY += d.xVal * d.yVal;
+        sumX2 += d.xVal * d.xVal;
+    });
+
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    return { slope, intercept };
+}
+
+// ----------------------------------------
+// DRAW Scatter
 // ----------------------------------------
 
 const scatterSvg = d3.select("#scatterSvg")
@@ -195,6 +228,16 @@ const xAxisG = scatterSvg.append("g").attr("class", "x-axis");
 const yAxisG = scatterSvg.append("g").attr("class", "y-axis");
 const titleG = scatterSvg.append("text").attr("class", "title");
 const defs = scatterSvg.append("defs");
+
+// linear regression settup
+const regressionLine = scatterG
+    .append("line")
+    .attr("class", "regression-line")
+    .attr("stroke", "crimson")
+    .attr("stroke-width", 2)
+    .attr("stroke-dasharray", "6 4")
+    .attr("opacity", 0);
+
 
 function ensureClip(code, r = 8) {
     if (!defs.select(`#clip-${code}`).node()) {
@@ -360,10 +403,52 @@ function drawScatterForYear(year, section = "economy") {
         .transition(t)
         .style("opacity", 1)
         .attr("transform", d => `translate(${x(d.xVal)}, ${y(d.yVal)})`);
+
+    // ---------------------------
+    // LINEAR REGRESSION
+    const lr = linearRegression(mergedWithFlags);
+
+    if (lr) {
+        const xDomain = x.domain(); // [xmin, xmax]
+
+        const regressionData = [
+            {
+                xVal: xDomain[0],
+                yVal: lr.slope * xDomain[0] + lr.intercept
+            },
+            {
+                xVal: xDomain[1],
+                yVal: lr.slope * xDomain[1] + lr.intercept
+            }
+        ];
+
+        regressionLine
+            .transition(t)
+            .attr("opacity", 1)
+            .attr("x1", x(regressionData[0].xVal))
+            .attr("y1", y(regressionData[0].yVal))
+            .attr("x2", x(regressionData[1].xVal))
+            .attr("y2", y(regressionData[1].yVal));
+    } else {
+        regressionLine
+            .transition(t)
+            .attr("opacity", 0);
+    }
 }
 
 // ----------------------------------------
-// Update button
+// Update button for population plot
+// ----------------------------------------
+
+
+document.getElementById("updateBtn-population").addEventListener("click", () => {
+    const raw = parseInt(document.getElementById("yearInput-population").value);
+    const year = Number.isFinite(raw) ? raw : 2020;   // fallback
+    drawPopulationPacking(year);
+});
+
+// ----------------------------------------
+// Update button for scatter plot
 // ----------------------------------------
 
 

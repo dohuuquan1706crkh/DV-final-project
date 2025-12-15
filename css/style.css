@@ -43,3 +43,34 @@ html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,'Helv
     background: linear-gradient(135deg, #45A049, #4CAF50);
     transform: translateY(-2px);
 }
+
+.scroll-down svg {
+  display: inline-block;
+  animation: bounceY 1.5s infinite;
+  cursor: pointer;
+}
+
+@keyframes bounceY {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(10px);
+  }
+  60% {
+    transform: translateY(5px);
+  }
+}
+
+/* Tùy chọn hover */
+.scroll-down svg:hover {
+  stroke: #0d6efd; /* Bootstrap primary */
+}
+
+/* Custom horizontal rule */
+.custom-hr {
+    margin: 0;    /* bỏ hết margin */
+    padding: 0;   /* bỏ hết padding */
+    border: 1px solid #6c757d; /* giữ màu border-secondary nếu muốn */
+    height: 1px;  /* đảm bảo chiều cao */
+}

@@ -5,6 +5,7 @@ const AGE_GROUPS = [
 ];
 
 const ctx = {};
+let pieCharts = []; // store references to each pie
 async function showCharts(countryName) {
   await drawPopulationPyramid(countryName);
   await drawGDPChart(countryName);
@@ -18,7 +19,20 @@ async function showCharts(countryName) {
     drawEmissionChart(countryName, emissionType);
   });
 
-  drawEmissionPieChart(countryName, "2001");
+  await initEmissionPieCharts(countryName);
+
+  const slider = document.getElementById("yearSlider");
+  const label = document.getElementById("yearLabel");
+
+  // first draw
+  updateEmissionPieCharts(countryName, slider.value);
+
+  slider.addEventListener("input", () => {
+    label.textContent = slider.value;
+    updateEmissionPieCharts(countryName, slider.value);
+  });
+
+
 }
 
 async function drawPopulationPyramid(countryName) {
@@ -312,6 +326,31 @@ function initPyramidChart() {
     .attr("y", -5)
     .attr("text-anchor", "middle")
     .text("Female");
+  // ---- LEGEND (CREATE ONCE) ----
+const legend = wrapper.append("div")
+  .style("margin-top", "6px")
+  .style("font-size", "12px")
+  .style("display", "flex")
+  .style("justify-content", "center")
+  .style("gap", "12px");
+
+const legendItem = legend.selectAll(".legend-item")
+  .data(PIE_CATEGORIES)
+  .enter()
+  .append("div")
+  .style("display", "flex")
+  .style("align-items", "center")
+  .style("gap", "4px");
+
+legendItem.append("span")
+  .style("width", "12px")
+  .style("height", "12px")
+  .style("display", "inline-block")
+  .style("background-color", d => color(d));
+
+legendItem.append("span")
+  .text(d => d);
+
 }
 
 function updatePyramidData(pyramidData) {
@@ -388,6 +427,16 @@ function updatePyramidData(pyramidData) {
         .attr("width", d => xScale(d.female) - xScale(0))
         .attr("height", yScale.bandwidth())
     );
+    chart.paths
+  .data(newData)
+  .transition()
+  .duration(750)
+  .attrTween("d", function (d) {
+    const i = d3.interpolate(this._current, d);
+    this._current = i(1);
+    return t => chart.arc(i(t));
+  });
+
 }
 
 document.getElementById("updateBtn-pyramid").addEventListener("click", () => {
@@ -821,131 +870,245 @@ async function drawEmissionChart(countryName, emissionType) {
   }
 }
 
-async function drawEmissionPieChart(countryName, year) {
-  const pollutant = ['Industrial Combustion', 'Transport', 'Power Industry', 'Building'];
-  const PIE_COLORS = [
-    "#4C6A92",
-    "#7A8F7A",
-    "#9FA6B2"
+async function initEmissionPieCharts(countryName) {
+  const container = d3.select("#emissionPieChart");
+
+  const pollutants = [
+    "Industrial Combustion",
+    "Transport",
+    "Power Industry",
+    "Building"
   ];
 
-  const PIE_CATEGORIES = [
-    "CO2",
-    "N2O",
-    "CH4"
-  ]
+  const PIE_CATEGORIES = ["CO2", "N2O", "CH4"];
+  const PIE_COLORS = ["#4C6A92", "#7A8F7A", "#9FA6B2"];
 
-  const container = d3.select("#emissionPieChart");
-  container.selectAll("*").remove(); 
-  
-    for (let i = 0; i < pollutant.length; i++) {
-      const files = PIE_CATEGORIES.map(c =>
-      `Dataset/Environment/Urban developement (${c}) emissions from ${pollutant[i]} (Energy) (Mt CO2e).csv`
-      );
-    try {
-      const datasets = await Promise.all(files.map(f => d3.csv(f)));
-      const pieData = [];
+  const width = 220;
+  const height = 220;
+  const radius = Math.min(width, height) / 2 - 20;
 
-      datasets.forEach((dataset, i) => {
-        const row = dataset.find(d => d["Country Name"] === countryName);
-        console.log(row);
-        if (!row || !row[year] || row[year] === "") return;
+  const color = d3.scaleOrdinal()
+    .domain(PIE_CATEGORIES)
+    .range(PIE_COLORS);
 
-        pieData.push({
-          category: PIE_CATEGORIES[i],
-          value: +row[year]
-        });
-      });
+  const pie = d3.pie()
+    .value(d => d.value)
+    .sort(null);
 
-      if (!pieData.length) {
-        container.append("pollutant[i]").text("No emission data available.");
-        return;
-      }
+  const arc = d3.arc()
+    .innerRadius(0)
+    .outerRadius(radius);
 
-      /* ======================
-        SVG SETUP
-      ====================== */
+  for (let i = 0; i < pollutants.length; i++) {
+    const wrapper = container.append("div")
+      .style("flex", "1 1 45%")
+      .style("text-align", "center");
 
-      const width = 220;
-      const height = 220;
-      const radius = Math.min(width, height) / 2 - 20;
-      const svg = container.append("svg")
+    wrapper.append("div")
+      .attr("class", "pie-title")
+      .style("font-weight", "600")
+      .style("margin-bottom", "6px")
+      .text(pollutants[i]);
+
+    const svg = wrapper.append("svg")
       .attr("width", width)
       .attr("height", height)
       .append("g")
       .attr("transform", `translate(${width / 2},${height / 2})`);
 
-      const color = d3.scaleOrdinal()
-          .domain(PIE_CATEGORIES)
-          .range(PIE_COLORS);
+    // create EMPTY arcs (important!)
+    const paths = svg.selectAll("path")
+      .data(pie(PIE_CATEGORIES.map(c => ({ category: c, value: 0 }))))
+      .enter()
+      .append("path")
+      .attr("fill", d => color(d.data.category))
+      .attr("stroke", "#fff")
+      .style("stroke-width", "2px")
+      .each(function (d) { this._current = d; }); // store state
+
+    pieCharts.push({
+      pollutant: pollutants[i],
+      svg,
+      paths,
+      pie,
+      arc,
+      color
+    });
+  }
+}
+
+async function updateEmissionPieCharts(countryName, year) {
+  const PIE_CATEGORIES = ["CO2", "N2O", "CH4"];
+
+  for (const chart of pieCharts) {
+    const files = PIE_CATEGORIES.map(c =>
+      `Dataset/Environment/Urban developement (${c}) emissions from ${chart.pollutant} (Energy) (Mt CO2e).csv`
+    );
+
+    const datasets = await Promise.all(files.map(f => d3.csv(f)));
+
+    const pieData = [];
+
+    datasets.forEach((dataset, i) => {
+      const row = dataset.find(d => d["Country Name"] === countryName);
+      pieData.push({
+        category: PIE_CATEGORIES[i],
+        value: row && row[year] ? +row[year] : 0
+      });
+    });
+
+    const newData = chart.pie(pieData);
+
+    chart.paths
+      .data(newData)
+      .transition()
+      .duration(750)
+      .attrTween("d", function (d) {
+        const interpolate = d3.interpolate(this._current, d);
+        this._current = interpolate(1);
+        return t => chart.arc(interpolate(t));
+      });
+
+    // update <title>
+    chart.paths.select("title").remove();
+    chart.paths.append("title")
+      .text(d =>
+        `${d.data.category}: ${d.data.value.toFixed(2)} Mt CO₂e`
+      );
+  }
+}
+
+
+// async function drawEmissionPieChart(countryName, year) {
+//   const pollutant = ['Industrial Combustion', 'Transport', 'Power Industry', 'Building'];
+//   const PIE_COLORS = [
+//     "#4C6A92",
+//     "#7A8F7A",
+//     "#9FA6B2"
+//   ];
+
+//   const PIE_CATEGORIES = [
+//     "CO2",
+//     "N2O",
+//     "CH4"
+//   ]
+
+//   const container = d3.select("#emissionPieChart");
+//   container.selectAll("*").remove(); 
+  
+//     for (let i = 0; i < pollutant.length; i++) {
+//       const files = PIE_CATEGORIES.map(c =>
+//       `Dataset/Environment/Urban developement (${c}) emissions from ${pollutant[i]} (Energy) (Mt CO2e).csv`
+//       );
+//     try {
+//       const datasets = await Promise.all(files.map(f => d3.csv(f)));
+//       const pieData = [];
+
+//       datasets.forEach((dataset, i) => {
+//         const row = dataset.find(d => d["Country Name"] === countryName);
+//         console.log(row);
+//         if (!row || !row[year] || row[year] === "") return;
+
+//         pieData.push({
+//           category: PIE_CATEGORIES[i],
+//           value: +row[year]
+//         });
+//       });
+
+//       if (!pieData.length) {
+//         container.append("pollutant[i]").text("No emission data available.");
+//         return;
+//       }
+
+//       /* ======================
+//         SVG SETUP
+//       ====================== */
+
+//       const width = 220;
+//       const height = 220;
+//       const radius = Math.min(width, height) / 2 - 20;
+//       const svg = container.append("svg")
+//       .attr("width", width)
+//       .attr("height", height)
+//       .append("g")
+//       .attr("transform", `translate(${width / 2},${height / 2})`);
+
+//       const color = d3.scaleOrdinal()
+//           .domain(PIE_CATEGORIES)
+//           .range(PIE_COLORS);
 
 
 
-      const pie = d3.pie()
-        .value(d => d.value)
-        .sort(null);
+//       const pie = d3.pie()
+//         .value(d => d.value)
+//         .sort(null);
 
-      const arc = d3.arc()
-        .innerRadius(0)
-        .outerRadius(radius);
+//       const arc = d3.arc()
+//         .innerRadius(0)
+//         .outerRadius(radius);
 
-      /* ======================
-        DRAW PIE
-      ====================== */
+//       /* ======================
+//         DRAW PIE
+//       ====================== */
 
-      svg.selectAll("path")
-        .data(pie(pieData))
-        .enter()
-        .append("path")
-        .attr("d", arc)
-        .attr("fill", d => color(d.data.category))
-        .attr("stroke", "#fff")
-        .style("stroke-width", "2px");
+//       svg.selectAll("path")
+//         .data(pie(pieData))
+//         .enter()
+//         .append("path")
+//         .attr("d", arc)
+//         .attr("fill", d => color(d.data.category))
+//         .attr("stroke", "#fff")
+//         .style("stroke-width", "2px")
+//         .append("title")   
+//         .text(d =>
+//           `${d.data.category}: ${d.data.value.toFixed(2)} Mt CO₂e`
+//         );
 
-      /* ======================
-        LABELS (CENTER)
-      ====================== */
-      const pieWrapper = container.append("div")
-      .style("width", "120px")
-      .style("text-align", "center");
 
-      pieWrapper.append("div")
-        .style("font-size", "14px")
-        .style("font-weight", "600")
-        .style("margin-bottom", "15px")
-        .text(`${pollutant[i]} emission in ${year}`);
+//       /* ======================
+//         LABELS (CENTER)
+//       ====================== */
+//       const pieWrapper = container.append("div")
+//       .style("width", "120px")
+//       .style("text-align", "center");
+
+//       pieWrapper.append("div")
+//         .style("font-size", "14px")
+//         .style("font-weight", "600")
+//         .style("margin-bottom", "15px")
+//         .text(`${pollutant[i]} emission in ${year}`);
       
 
-      /* ======================
-        LEGEND
-      ====================== */
-      const legend = pieWrapper.append("div")
-        .style("margin-top", "6px")
-        .style("font-size", "12px");
+//       /* ======================
+//         LEGEND
+//       ====================== */
+//       const legend = pieWrapper.append("div")
+//         .style("margin-top", "6px")
+//         .style("font-size", "12px");
 
-      const legendItem = legend.selectAll(".legend-item")
-        .data(pieData)
-        .enter()
-        .append("div")
-        .style("display", "flex")
-        .style("align-items", "center")
-        .style("justify-content", "center")
-        .style("gap", "6px");
+//       const legendItem = legend.selectAll(".legend-item")
+//         .data(pieData)
+//         .enter()
+//         .append("div")
+//         .style("display", "flex")
+//         .style("align-items", "center")
+//         .style("justify-content", "center")
+//         .style("gap", "6px");
 
-      legendItem.append("span")
-        .style("width", "12px")
-        .style("height", "12px")
-        .style("background-color", d => color(d.category))
-        .style("display", "inline-block");
+//       legendItem.append("span")
+//         .style("width", "12px")
+//         .style("height", "12px")
+//         .style("background-color", d => color(d.category))
+//         .style("display", "inline-block");
 
-      legendItem.append("span")
-        .text(d => d.category);
+//       legendItem.append("span")
+//         .text(d => d.category);
 
-    }
+//     }
     
-  catch (err) {
-    console.error(err);
-    container.append("p").text("Failed to load pie chart data.");
-  }
-  } 
-}
+//   catch (err) {
+//     console.error(err);
+//     container.append("p").text("Failed to load pie chart data.");
+//   }
+//   } 
+// }

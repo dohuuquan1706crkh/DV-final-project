@@ -459,33 +459,37 @@ async function drawGDPChart(countryName) {
   try {
     const currentGDP = await d3.csv("Dataset/Economy/Economy_GDP(current US$).csv");
     const growthGDP = await d3.csv("Dataset/Economy/Economy_GDP growth (annual _).csv");
+
     const countryCurrentData = currentGDP.find(d => d["Country Name"] === countryName);
     const countryGrowthGDP = growthGDP.find(d => d["Country Name"] === countryName);
+
     if (!countryCurrentData && !countryGrowthGDP) {
       gdpDiv.append("p").text("No GDP data found for this country.");
       return;
     }
 
-    // Extract year-value pairs
-    const gdpValues = Object.entries(countryCurrentData)
-      .filter(([key, val]) => /^\d{4}$/.test(key) && val !== "")
-      .map(([year, val]) => ({
-        year: +year,
-        value: +val
-      }))
-      .filter(d => !isNaN(d.value));
+    // Extract year-value pairs for both series
+    const gdpValues = Object.entries(countryCurrentData || {})
+      .filter(([k,v]) => /^\d{4}$/.test(k) && v !== "")
+      .map(([year, val]) => ({ year: +year, value: +val }))
+      .filter(d => !isNaN(d.value))
+      .sort((a,b) => a.year - b.year);
 
-    if (gdpValues.length === 0) {
-      gdpDiv.append("p").text("No GDP data available.");
-      return;
-    }
+    const gdpGrowth = Object.entries(countryGrowthGDP || {})
+      .filter(([k,v]) => /^\d{4}$/.test(k) && v !== "")
+      .map(([year, val]) => ({ year: +year, value: +val }))
+      .filter(d => !isNaN(d.value))
+      .sort((a,b) => a.year - b.year);
 
-    // Sort by year
-    gdpValues.sort((a, b) => a.year - b.year);
+    const margin = {top: 20, right: 70, bottom: 40, left: 70};
+    const width = 800 - margin.left - margin.right;
+    const height = 400 - margin.top - margin.bottom;
 
-    const margin = {top: 20, right: 40, bottom: 40, left: 70};
-    const width = 700 - margin.left - margin.right;
-    const height = 500 - margin.top - margin.bottom;
+    // Create a container flex for chart + info blocks
+    const container = gdpDiv.append("div")
+      .style("display", "flex")
+      .style("margin", "7%");
+      
 
     const svg = gdpDiv.append("svg")
       .attr("width", width + margin.left + margin.right)
@@ -493,50 +497,81 @@ async function drawGDPChart(countryName) {
       .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
+    // X scale
     const x = d3.scaleLinear()
       .domain(d3.extent(gdpValues, d => d.year))
       .range([0, width]);
 
-    const y = d3.scaleLinear()
+    // Y scale left (current GDP)
+    const yLeft = d3.scaleLinear()
       .domain([0, d3.max(gdpValues, d => d.value)])
       .nice()
       .range([height, 0]);
 
-    const line = d3.line()
-      .x(d => x(d.year))
-      .y(d => y(d.value))
-      .curve(d3.curveMonotoneX);
+    // Y scale right (GDP growth)
+    const yRight = d3.scaleLinear()
+      .domain([d3.min(gdpGrowth, d => d.value), d3.max(gdpGrowth, d => d.value)])
+      .nice()
+      .range([height, 0]);
 
-    const path = svg.append("path")
-      .datum(gdpValues)
-      .attr("fill", "none")
-      .attr("stroke", "#28a745")
-      .attr("stroke-width", 2.5)
-      .attr("d", line);
-
-    path.transition()
-      .duration(500) // 1.5 seconds for transition duration
-      .ease(d3.easeCubicOut); // Ease function for smooth transition
-
-    svg.selectAll(".dot")
-      .data(gdpValues)
-      .enter().append("circle")
-      .attr("cx", d => x(d.year))
-      .attr("cy", d => y(d.value))
-      .attr("r", 3)
-      .attr("fill", "#28a745")
-      .transition()
-      .duration(500)
-      .delay((d, i) => i * 50)
-      .attr("opacity", 1);
-
+    // Axes
     svg.append("g")
       .attr("transform", `translate(0,${height})`)
       .call(d3.axisBottom(x).tickFormat(d3.format("d")));
 
     svg.append("g")
-      .call(d3.axisLeft(y).ticks(6).tickFormat(d3.format(".2s")));
+      .call(d3.axisLeft(yLeft).ticks(6).tickFormat(d3.format(".2s")));
 
+    svg.append("g")
+      .attr("transform", `translate(${width},0)`)
+      .call(d3.axisRight(yRight).ticks(6));
+
+    // Line generators
+    const lineGDP = d3.line()
+      .x(d => x(d.year))
+      .y(d => yLeft(d.value))
+      .curve(d3.curveMonotoneX);
+
+    const lineGrowth = d3.line()
+      .x(d => x(d.year))
+      .y(d => yRight(d.value))
+      .curve(d3.curveMonotoneX);
+
+    // Draw lines
+    svg.append("path")
+      .datum(gdpValues)
+      .attr("fill", "none")
+      .attr("stroke", "#f2e06fff")
+      .attr("stroke-width", 2.5)
+      .attr("d", lineGDP);
+
+    svg.append("path")
+      .datum(gdpGrowth)
+      .attr("fill", "none")
+      .attr("stroke", "#f9b793ff")
+      .attr("stroke-width", 2.5)
+      .attr("d", lineGrowth);
+
+    // Draw dots
+    svg.selectAll(".dotGDP")
+      .data(gdpValues)
+      .enter().append("circle")
+      .attr("class", "dotGDP")
+      .attr("cx", d => x(d.year))
+      .attr("cy", d => yLeft(d.value))
+      .attr("r", 3)
+      .attr("fill", "#f2e06fff");
+
+    svg.selectAll(".dotGrowth")
+      .data(gdpGrowth)
+      .enter().append("circle")
+      .attr("class", "dotGrowth")
+      .attr("cx", d => x(d.year))
+      .attr("cy", d => yRight(d.value))
+      .attr("r", 3)
+      .attr("fill", "#f9b793ff");
+
+    // Labels
     svg.append("text")
       .attr("x", width / 2)
       .attr("y", height + 35)
@@ -546,91 +581,50 @@ async function drawGDPChart(countryName) {
     svg.append("text")
       .attr("transform", "rotate(-90)")
       .attr("x", -height / 2)
-      .attr("y", -55)
+      .attr("y", -50)
       .attr("text-anchor", "middle")
       .text("GDP (current US$)");
 
-    // Extract year-value pairs
-    const gdpGrowth = Object.entries(countryGrowthGDP)
-      .filter(([key, val]) => /^\d{4}$/.test(key) && val !== "")
-      .map(([year, val]) => ({
-        year: +year,
-        value: +val
-      }))
-      .filter(d => !isNaN(d.value));
-
-    if (gdpGrowth.length === 0) {
-      gdpDiv.append("p").text("No GDP data available.");
-      return;
-    }
-
-    // Sort by year
-    gdpGrowth.sort((a, b) => a.year - b.year);
-
-    const svg1 = gdpDiv.append("svg")
-      .attr("width", width + margin.left + margin.right)
-      .attr("height", height + margin.top + margin.bottom)
-      .append("g")
-      .attr("transform", `translate(${margin.left},${margin.top})`);
-
-    const x1 = d3.scaleLinear()
-      .domain(d3.extent(gdpGrowth, d => d.year))
-      .range([0, width]);
-
-    const y1 = d3.scaleLinear()
-      .domain([d3.min(gdpGrowth, d => d.value), d3.max(gdpGrowth, d => d.value)])
-      .nice()
-      .range([height, 0]);
-
-    const line1 = d3.line()
-      .x(d => x1(d.year))
-      .y(d => y1(d.value))
-      .curve(d3.curveMonotoneX);
-
-    const path1 = svg1.append("path")
-      .datum(gdpGrowth)
-      .attr("fill", "none")
-      .attr("stroke", "#002ebaff")
-      .attr("stroke-width", 2.5)
-      .attr("d", line1);
-
-    svg1.selectAll(".dot")
-      .data(gdpGrowth)
-      .enter().append("circle")
-      .attr("cx", d => x1(d.year))
-      .attr("cy", d => y1(d.value))
-      .attr("r", 3)
-      .attr("fill", "#002ebaff")
-      .transition()
-      .duration(500)
-      .delay((d, i) => i * 50)
-      .attr("opacity", 1);
-
-    svg1.append("g")
-      .attr("transform", `translate(0,${height})`)
-      .call(d3.axisBottom(x1).tickFormat(d3.format("d")));
-
-    svg1.append("g")
-      .call(d3.axisLeft(y1).ticks(6).tickFormat(d3.format(".2s")));
-
-    svg1.append("text")
-      .attr("x", width / 2)
-      .attr("y", height + 35)
-      .attr("text-anchor", "middle")
-      .text("Year");
-
-    svg1.append("text")
+    svg.append("text")
       .attr("transform", "rotate(-90)")
       .attr("x", -height / 2)
-      .attr("y", -55)
+      .attr("y", width + 60)
       .attr("text-anchor", "middle")
       .text("GDP Growth (annual %)");
+
+    // ======================
+    // Right: Info blocks
+    // ======================
+    const infoContainer = container.append("div")
+      .style("display", "flex")
+      .style("flex-direction", "column")
+      .style("gap", "20px")
+      .style("min-width", "180px");
+
+    // Latest GDP
+    const latestGDP = gdpValues[gdpValues.length - 1];
+    infoContainer.append("div")
+      .style("background", "#f9b793ff")
+      .style("padding", "15px")
+      .style("border-radius", "8px")
+      .style("text-align", "center")
+      .html(`<strong>GDP in ${latestGDP.year}</strong><br>${latestGDP.value.toLocaleString()} US$`);
+
+    // Latest GDP Growth
+    const latestGrowth = gdpGrowth[gdpGrowth.length - 1];
+    infoContainer.append("div")
+      .style("background", "#f2e06fff")
+      .style("padding", "15px")
+      .style("border-radius", "8px")
+      .style("text-align", "center")
+      .html(`<strong>GDP Growth in ${latestGDP.year}</strong><br>${latestGrowth.value.toFixed(2)} %`);
 
   } catch (err) {
     console.error("Error loading GDP data:", err);
     gdpDiv.append("p").text("Failed to load GDP data.");
   }
 }
+
 
 // ----------------------------
 // Co2 chart
@@ -726,11 +720,12 @@ async function drawCO2Chart(countryName) {
 // emission chart
 // ----------------------------
 
+let emissionSvg, emissionX, emissionY, emissionLineGenerator, emissionSeriesPaths;
+
 async function drawEmissionChart(countryName, emissionType) {
-
   const emissionDiv = d3.select("#emissionChart");
-  emissionDiv.selectAll("*").remove();
 
+  // Load data
   const files = [
     `Dataset/Environment/Urban developement (${emissionType}) emissions from Industrial Combustion (Energy) (Mt CO2e).csv`,
     `Dataset/Environment/Urban developement (${emissionType}) emissions from Transport (Energy) (Mt CO2e).csv`,
@@ -747,128 +742,138 @@ async function drawEmissionChart(countryName, emissionType) {
 
   const colors = ["#4C6A92", "#8C6D5C", "#1f77b4", "#7A8F7A"];
 
-  try {
-    const datasets = await Promise.all(files.map(f => d3.csv(f)));
+  const datasets = await Promise.all(files.map(f => d3.csv(f)));
 
-    const dataByYear = {};
+  const dataByYear = {};
 
-    datasets.forEach((dataset, i) => {
-      const row = dataset.find(d => d["Country Name"] === countryName);
-      if (!row) return;
+  datasets.forEach((dataset, i) => {
+    const row = dataset.find(d => d["Country Name"] === countryName);
+    if (!row) return;
 
-      Object.entries(row)
-        .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
-        .forEach(([year, value]) => {
-          if (!dataByYear[year]) dataByYear[year] = { year: +year };
-          dataByYear[year][seriesNames[i]] = +value;
-        });
-    });
+    Object.entries(row)
+      .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
+      .forEach(([year, value]) => {
+        if (!dataByYear[year]) dataByYear[year] = { year: +year };
+        dataByYear[year][seriesNames[i]] = +value;
+      });
+  });
 
-    const data = Object.values(dataByYear)
-      .sort((a, b) => a.year - b.year);
+  const data = Object.values(dataByYear).sort((a,b) => a.year - b.year);
+  if (!data.length) {
+    emissionDiv.append("p").text("No emission data found.");
+    return;
+  }
 
-    if (!data.length) {
-      emissionDiv.append("p").text("No emission data found.");
-      return;
-    }
+  // CHART SETUP
+  const margin = { top: 20, right: 120, bottom: 40, left: 60 };
+  const width = 1200 - margin.left - margin.right;
+  const height = 400 - margin.top - margin.bottom;
 
-    /* ======================
-       CHART SETUP
-    ====================== */
-
-    const margin = { top: 20, right: 120, bottom: 40, left: 60 };
-    const width = 1200 - margin.left - margin.right;
-    const height = 400 - margin.top - margin.bottom;
-
-    const svg = emissionDiv.append("svg")
+  // If SVG exists, reuse it
+  if (!emissionSvg) {
+    emissionSvg = emissionDiv.append("svg")
       .attr("width", width + margin.left + margin.right)
       .attr("height", height + margin.top + margin.bottom)
       .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const x = d3.scaleLinear()
+    emissionX = d3.scaleLinear()
       .domain(d3.extent(data, d => d.year))
       .range([0, width]);
 
-    const y = d3.scaleLinear()
-      .domain([
-        0,
-        d3.max(data, d => Math.max(...seriesNames.map(s => d[s] || 0)))
-      ])
+    emissionY = d3.scaleLinear()
+      .domain([0, d3.max(data, d => Math.max(...seriesNames.map(s => d[s] || 0)))])
       .nice()
       .range([height, 0]);
 
-    svg.append("g")
+    emissionSvg.append("g")
+      .attr("class", "x-axis")
       .attr("transform", `translate(0,${height})`)
-      .call(d3.axisBottom(x).tickFormat(d3.format("d")));
+      .call(d3.axisBottom(emissionX).tickFormat(d3.format("d")));
 
-    svg.append("g")
-      .call(d3.axisLeft(y));
+    emissionSvg.append("g")
+      .attr("class", "y-axis")
+      .call(d3.axisLeft(emissionY));
 
-    /* ======================
-       LINES
-    ====================== */
-
-    seriesNames.forEach((name, i) => {
-      const lineData = data.map(d => ({
-        year: d.year,
-        value: d[name] || 0
-      }));
-
-      svg.append("path")
-        .datum(lineData)
-        .attr("fill", "none")
-        .attr("stroke", colors[i])
-        .attr("stroke-width", 2.5)
-        .attr("d", d3.line()
-          .x(d => x(d.year))
-          .y(d => y(d.value))
-          .curve(d3.curveMonotoneX)
-        );
-    });
-
-    /* ======================
-       LABELS
-    ====================== */
-
-    svg.append("text")
+    emissionSvg.append("text")
       .attr("x", width / 2)
       .attr("y", height + 35)
       .attr("text-anchor", "middle")
       .text("Year");
 
-    svg.append("text")
+    emissionSvg.append("text")
+      .attr("class", "y-label")
       .attr("transform", "rotate(-90)")
       .attr("x", -height / 2)
       .attr("y", -45)
       .attr("text-anchor", "middle")
       .text(`${emissionType} Emissions (Mt CO2e)`);
 
-    /* ======================
-       LEGEND
-    ====================== */
+    // Line generator
+    emissionLineGenerator = d3.line()
+      .x(d => emissionX(d.year))
+      .y(d => emissionY(d.value))
+      .curve(d3.curveMonotoneX);
 
-    const legend = svg.selectAll(".legend")
-      .data(seriesNames)
+    // Initialize paths
+    emissionSeriesPaths = emissionSvg.selectAll(".emission-line")
+      .data(seriesNames.map(s => ({ name: s, color: colors[seriesNames.indexOf(s)], values: data.map(d => ({ year: d.year, value: d[s] || 0 })) })))
       .enter()
-      .append("g")
-      .attr("transform", (d, i) => `translate(${width + 20},${20 + i * 20})`);
+      .append("path")
+      .attr("class", "emission-line")
+      .attr("fill", "none")
+      .attr("stroke", d => d.color)
+      .attr("stroke-width", 2.5)
+      .attr("d", d => emissionLineGenerator(d.values));
+      /* ======================
+        LEGEND
+      ====================== */
+      const legend = emissionSvg.append("g")
+        .attr("class", "legend")
+        .attr("transform", `translate(${width + 20}, 20)`); // position to the right of chart
 
-    legend.append("rect")
-      .attr("width", 12)
-      .attr("height", 12)
-      .attr("fill", (d, i) => colors[i]);
+      seriesNames.forEach((name, i) => {
+        const legendRow = legend.append("g")
+          .attr("transform", `translate(0, ${i * 25})`);
 
-    legend.append("text")
-      .attr("x", 18)
-      .attr("y", 10)
-      .text(d => d);
+        // color box
+        legendRow.append("rect")
+          .attr("width", 18)
+          .attr("height", 18)
+          .attr("fill", colors[i]);
 
-  } catch (err) {
-    console.error(err);
-    emissionDiv.append("p").text("Failed to load emission data.");
+        // text
+        legendRow.append("text")
+          .attr("x", 24)
+          .attr("y", 14)
+          .text(name)
+          .style("font-size", "12px");
+});
+
+  } else {
+    // UPDATE SCALE
+    emissionY.domain([0, d3.max(data, d => Math.max(...seriesNames.map(s => d[s] || 0)))])
+      .nice();
+
+    emissionSvg.select(".y-axis")
+      .transition().duration(800)
+      .call(d3.axisLeft(emissionY));
+
+    // Update Y label
+    emissionSvg.select(".y-label")
+      .text(`${emissionType} Emissions (Mt CO2e)`);
+
+    // UPDATE LINES
+    emissionSeriesPaths.data(seriesNames.map(s => ({ name: s, color: colors[seriesNames.indexOf(s)], values: data.map(d => ({ year: d.year, value: d[s] || 0 })) })))
+      .transition()
+      .duration(800)
+      .attr("d", d => emissionLineGenerator(d.values));
   }
 }
+
+// ----------------------------
+// emission pie chart
+// ----------------------------
 
 async function initEmissionPieCharts(countryName) {
   const container = d3.select("#emissionPieChart");
@@ -902,19 +907,50 @@ async function initEmissionPieCharts(countryName) {
   for (let i = 0; i < pollutants.length; i++) {
     const wrapper = container.append("div")
       .style("flex", "1 1 45%")
-      .style("text-align", "center");
+      .style("display", "flex")       // make wrapper flex row
+      .style("align-items", "center")  // vertically center
+      .style("gap", "12px");           // space between chart and legend
 
-    wrapper.append("div")
+    // Pie + title container
+    const pieContainer = wrapper.append("div")
+      .style("text-align", "center")
+
+    pieContainer.append("div")
       .attr("class", "pie-title")
       .style("font-weight", "600")
       .style("margin-bottom", "6px")
       .text(pollutants[i]);
 
-    const svg = wrapper.append("svg")
+    const svg = pieContainer.append("svg")
       .attr("width", width)
       .attr("height", height)
       .append("g")
       .attr("transform", `translate(${width / 2},${height / 2})`);
+
+
+    const legend = wrapper.append("div")
+      .style("display", "flex")
+      .style("flex-direction", "column") // stack legend items vertically
+      .style("font-size", "12px")
+      .style("gap", "6px");               // space between items
+
+    const legendItem = legend.selectAll(".legend-item")
+      .data(PIE_CATEGORIES)
+      .enter()
+      .append("div")
+      .style("display", "flex")
+      .style("align-items", "center")
+      .style("gap", "4px");
+
+    legendItem.append("span")
+      .style("width", "12px")
+      .style("height", "12px")
+      .style("display", "inline-block")
+      .style("background-color", d => color(d));
+
+    legendItem.append("span")
+      .text(d => d);
+
 
     // create EMPTY arcs (important!)
     const paths = svg.selectAll("path")
@@ -978,137 +1014,3 @@ async function updateEmissionPieCharts(countryName, year) {
   }
 }
 
-
-// async function drawEmissionPieChart(countryName, year) {
-//   const pollutant = ['Industrial Combustion', 'Transport', 'Power Industry', 'Building'];
-//   const PIE_COLORS = [
-//     "#4C6A92",
-//     "#7A8F7A",
-//     "#9FA6B2"
-//   ];
-
-//   const PIE_CATEGORIES = [
-//     "CO2",
-//     "N2O",
-//     "CH4"
-//   ]
-
-//   const container = d3.select("#emissionPieChart");
-//   container.selectAll("*").remove(); 
-  
-//     for (let i = 0; i < pollutant.length; i++) {
-//       const files = PIE_CATEGORIES.map(c =>
-//       `Dataset/Environment/Urban developement (${c}) emissions from ${pollutant[i]} (Energy) (Mt CO2e).csv`
-//       );
-//     try {
-//       const datasets = await Promise.all(files.map(f => d3.csv(f)));
-//       const pieData = [];
-
-//       datasets.forEach((dataset, i) => {
-//         const row = dataset.find(d => d["Country Name"] === countryName);
-//         console.log(row);
-//         if (!row || !row[year] || row[year] === "") return;
-
-//         pieData.push({
-//           category: PIE_CATEGORIES[i],
-//           value: +row[year]
-//         });
-//       });
-
-//       if (!pieData.length) {
-//         container.append("pollutant[i]").text("No emission data available.");
-//         return;
-//       }
-
-//       /* ======================
-//         SVG SETUP
-//       ====================== */
-
-//       const width = 220;
-//       const height = 220;
-//       const radius = Math.min(width, height) / 2 - 20;
-//       const svg = container.append("svg")
-//       .attr("width", width)
-//       .attr("height", height)
-//       .append("g")
-//       .attr("transform", `translate(${width / 2},${height / 2})`);
-
-//       const color = d3.scaleOrdinal()
-//           .domain(PIE_CATEGORIES)
-//           .range(PIE_COLORS);
-
-
-
-//       const pie = d3.pie()
-//         .value(d => d.value)
-//         .sort(null);
-
-//       const arc = d3.arc()
-//         .innerRadius(0)
-//         .outerRadius(radius);
-
-//       /* ======================
-//         DRAW PIE
-//       ====================== */
-
-//       svg.selectAll("path")
-//         .data(pie(pieData))
-//         .enter()
-//         .append("path")
-//         .attr("d", arc)
-//         .attr("fill", d => color(d.data.category))
-//         .attr("stroke", "#fff")
-//         .style("stroke-width", "2px")
-//         .append("title")   
-//         .text(d =>
-//           `${d.data.category}: ${d.data.value.toFixed(2)} Mt CO₂e`
-//         );
-
-
-//       /* ======================
-//         LABELS (CENTER)
-//       ====================== */
-//       const pieWrapper = container.append("div")
-//       .style("width", "120px")
-//       .style("text-align", "center");
-
-//       pieWrapper.append("div")
-//         .style("font-size", "14px")
-//         .style("font-weight", "600")
-//         .style("margin-bottom", "15px")
-//         .text(`${pollutant[i]} emission in ${year}`);
-      
-
-//       /* ======================
-//         LEGEND
-//       ====================== */
-//       const legend = pieWrapper.append("div")
-//         .style("margin-top", "6px")
-//         .style("font-size", "12px");
-
-//       const legendItem = legend.selectAll(".legend-item")
-//         .data(pieData)
-//         .enter()
-//         .append("div")
-//         .style("display", "flex")
-//         .style("align-items", "center")
-//         .style("justify-content", "center")
-//         .style("gap", "6px");
-
-//       legendItem.append("span")
-//         .style("width", "12px")
-//         .style("height", "12px")
-//         .style("background-color", d => color(d.category))
-//         .style("display", "inline-block");
-
-//       legendItem.append("span")
-//         .text(d => d.category);
-
-//     }
-    
-//   catch (err) {
-//     console.error(err);
-//     container.append("p").text("Failed to load pie chart data.");
-//   }
-//   } 
-// }

@@ -9,35 +9,17 @@ async function showCharts(countryName) {
   await drawPopulationPyramid(countryName);
   await drawGDPChart(countryName);
   await drawCO2Chart(countryName);
-  await drawEmissionChart(countryName);
+  
+  let emissionType = "CO2";
+  drawEmissionChart(countryName, emissionType);
+  document.getElementById("emissionType")
+  .addEventListener("change", function () {
+    emissionType = this.value;
+    drawEmissionChart(countryName, emissionType);
+  });
+
+  drawEmissionPieChart(countryName, "2001");
 }
-
-// ----------------------------
-// Population pyramid chart
-// ----------------------------
-
-// async function drawPopulationPyramid(countryName) {
-//   const pyramidDiv = d3.select("#pyramidChart");
-//   pyramidDiv.selectAll("*").remove(); // Clear existing chart
-
-//   try {
-//     // Load the data from all age group CSV files
-//     const rawData = await Promise.all(
-//     AGE_GROUPS.map(ageGroup =>
-//         d3.csv(`DataSet/Health/Health_Population_ages_${ageGroup}_male_of_male_population.csv`)
-//             .then(data => ({ ageGroup, data }))  // Include the ageGroup with the data
-//         )
-//     );
-//     // Transform the data for the pyramid chart
-//     console.log("rawData");
-//     console.log(rawData);
-//     const pyramidData = transformDataForPopulationPyramid(rawData, countryName);
-//     createPopulationChart(pyramidData);
-//   } catch (err) {
-//     console.error("Error loading population dat:", err);
-//     pyramidDiv.append("p").text("Failed to load population data.");
-//   }
-// }
 
 async function drawPopulationPyramid(countryName) {
   const pyramidDiv = d3.select("#pyramidChart");
@@ -426,15 +408,17 @@ async function drawGDPChart(countryName) {
   gdpDiv.selectAll("*").remove(); // clear
 
   try {
-    const data = await d3.csv("Dataset/Economy/Economy_GDP(current US$).csv");
-    const countryData = data.find(d => d["Country Name"] === countryName);
-    if (!countryData) {
+    const currentGDP = await d3.csv("Dataset/Economy/Economy_GDP(current US$).csv");
+    const growthGDP = await d3.csv("Dataset/Economy/Economy_GDP growth (annual _).csv");
+    const countryCurrentData = currentGDP.find(d => d["Country Name"] === countryName);
+    const countryGrowthGDP = growthGDP.find(d => d["Country Name"] === countryName);
+    if (!countryCurrentData && !countryGrowthGDP) {
       gdpDiv.append("p").text("No GDP data found for this country.");
       return;
     }
 
     // Extract year-value pairs
-    const gdpValues = Object.entries(countryData)
+    const gdpValues = Object.entries(countryCurrentData)
       .filter(([key, val]) => /^\d{4}$/.test(key) && val !== "")
       .map(([year, val]) => ({
         year: +year,
@@ -452,7 +436,7 @@ async function drawGDPChart(countryName) {
 
     const margin = {top: 20, right: 40, bottom: 40, left: 70};
     const width = 700 - margin.left - margin.right;
-    const height = 400 - margin.top - margin.bottom;
+    const height = 500 - margin.top - margin.bottom;
 
     const svg = gdpDiv.append("svg")
       .attr("width", width + margin.left + margin.right)
@@ -516,6 +500,83 @@ async function drawGDPChart(countryName) {
       .attr("y", -55)
       .attr("text-anchor", "middle")
       .text("GDP (current US$)");
+
+    // Extract year-value pairs
+    const gdpGrowth = Object.entries(countryGrowthGDP)
+      .filter(([key, val]) => /^\d{4}$/.test(key) && val !== "")
+      .map(([year, val]) => ({
+        year: +year,
+        value: +val
+      }))
+      .filter(d => !isNaN(d.value));
+
+    if (gdpGrowth.length === 0) {
+      gdpDiv.append("p").text("No GDP data available.");
+      return;
+    }
+
+    // Sort by year
+    gdpGrowth.sort((a, b) => a.year - b.year);
+
+    const svg1 = gdpDiv.append("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const x1 = d3.scaleLinear()
+      .domain(d3.extent(gdpGrowth, d => d.year))
+      .range([0, width]);
+
+    const y1 = d3.scaleLinear()
+      .domain([d3.min(gdpGrowth, d => d.value), d3.max(gdpGrowth, d => d.value)])
+      .nice()
+      .range([height, 0]);
+
+    const line1 = d3.line()
+      .x(d => x1(d.year))
+      .y(d => y1(d.value))
+      .curve(d3.curveMonotoneX);
+
+    const path1 = svg1.append("path")
+      .datum(gdpGrowth)
+      .attr("fill", "none")
+      .attr("stroke", "#002ebaff")
+      .attr("stroke-width", 2.5)
+      .attr("d", line1);
+
+    svg1.selectAll(".dot")
+      .data(gdpGrowth)
+      .enter().append("circle")
+      .attr("cx", d => x1(d.year))
+      .attr("cy", d => y1(d.value))
+      .attr("r", 3)
+      .attr("fill", "#002ebaff")
+      .transition()
+      .duration(500)
+      .delay((d, i) => i * 50)
+      .attr("opacity", 1);
+
+    svg1.append("g")
+      .attr("transform", `translate(0,${height})`)
+      .call(d3.axisBottom(x1).tickFormat(d3.format("d")));
+
+    svg1.append("g")
+      .call(d3.axisLeft(y1).ticks(6).tickFormat(d3.format(".2s")));
+
+    svg1.append("text")
+      .attr("x", width / 2)
+      .attr("y", height + 35)
+      .attr("text-anchor", "middle")
+      .text("Year");
+
+    svg1.append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("x", -height / 2)
+      .attr("y", -55)
+      .attr("text-anchor", "middle")
+      .text("GDP Growth (annual %)");
+
   } catch (err) {
     console.error("Error loading GDP data:", err);
     gdpDiv.append("p").text("Failed to load GDP data.");
@@ -548,7 +609,7 @@ async function drawCO2Chart(countryName) {
       co2Div.append("p").text("No CO₂ data available.");
       return;
     }
-    const margin = {top: 20, right: 40, bottom: 40, left: 70};
+    const margin = {top: 20, right: 40, bottom: 20, left: 70};
     const width = 700 - margin.left - margin.right;
     const height = 400 - margin.top - margin.bottom;
 
@@ -616,47 +677,58 @@ async function drawCO2Chart(countryName) {
 // emission chart
 // ----------------------------
 
-async function drawEmissionChart(countryName) {
+async function drawEmissionChart(countryName, emissionType) {
+
   const emissionDiv = d3.select("#emissionChart");
   emissionDiv.selectAll("*").remove();
 
   const files = [
-    "Dataset/Environment/Urban developement_Carbon dioxide (CO2) emissions from Industrial Processes (Mt CO2e).csv",
-    "Dataset/Environment/Urban developement_Carbon dioxide (CO2) emissions from Transport (Energy) (Mt CO2e).csv",
-    "Dataset/Environment/Urban developement_Carbon dioxide (CO2) emissions from Power Industry (Energy) (Mt CO2e).csv",
-    "Dataset/Environment/Urban developement_Carbon dioxide (CO2) emissions from Building (Energy) (Mt CO2e).csv"
+    `Dataset/Environment/Urban developement (${emissionType}) emissions from Industrial Combustion (Energy) (Mt CO2e).csv`,
+    `Dataset/Environment/Urban developement (${emissionType}) emissions from Transport (Energy) (Mt CO2e).csv`,
+    `Dataset/Environment/Urban developement (${emissionType}) emissions from Power Industry (Energy) (Mt CO2e).csv`,
+    `Dataset/Environment/Urban developement (${emissionType}) emissions from Building (Energy) (Mt CO2e).csv`
   ];
 
-  const seriesNames = ["Industrial Processes", "Transport", "Energy Process", "Building"];
-  const colors = ["#1f77b4", "#ff7f0e", "#e21661ff","#2ca02c"];
+  const seriesNames = [
+    "Industrial Combustion",
+    "Transport",
+    "Power Industry",
+    "Building"
+  ];
+
+  const colors = ["#4C6A92", "#8C6D5C", "#1f77b4", "#7A8F7A"];
 
   try {
     const datasets = await Promise.all(files.map(f => d3.csv(f)));
 
     const dataByYear = {};
+
     datasets.forEach((dataset, i) => {
       const row = dataset.find(d => d["Country Name"] === countryName);
       if (!row) return;
 
       Object.entries(row)
-        .filter(([key, val]) => /^\d{4}$/.test(key) && val !== "")
-        .forEach(([year, val]) => {
+        .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
+        .forEach(([year, value]) => {
           if (!dataByYear[year]) dataByYear[year] = { year: +year };
-          dataByYear[year][seriesNames[i]] = +val;
+          dataByYear[year][seriesNames[i]] = +value;
         });
     });
 
     const data = Object.values(dataByYear)
-      .filter(d => seriesNames.some(s => d[s] !== undefined))
       .sort((a, b) => a.year - b.year);
 
-    if (data.length === 0) {
-      emissionDiv.append("p").text("No emission data found for this country.");
+    if (!data.length) {
+      emissionDiv.append("p").text("No emission data found.");
       return;
     }
 
-    const margin = {top: 20, right: 80, bottom: 40, left: 60};
-    const width = 700 - margin.left - margin.right;
+    /* ======================
+       CHART SETUP
+    ====================== */
+
+    const margin = { top: 20, right: 120, bottom: 40, left: 60 };
+    const width = 1200 - margin.left - margin.right;
     const height = 400 - margin.top - margin.bottom;
 
     const svg = emissionDiv.append("svg")
@@ -670,38 +742,12 @@ async function drawEmissionChart(countryName) {
       .range([0, width]);
 
     const y = d3.scaleLinear()
-      .domain([0, d3.max(data, d => Math.max(...seriesNames.map(s => d[s] || 0)))])
+      .domain([
+        0,
+        d3.max(data, d => Math.max(...seriesNames.map(s => d[s] || 0)))
+      ])
       .nice()
       .range([height, 0]);
-
-    const line = d3.line()
-      .x(d => x(d.year))
-      .y((d, i, nodes) => y(d.value));
-
-    // series
-    seriesNames.forEach((name, idx) => {
-      const lineData = data.map(d => ({ year: d.year, value: d[name] || 0 }));
-
-      svg.append("path")
-        .datum(lineData)
-        .attr("fill", "none")
-        .attr("stroke", colors[idx])
-        .attr("stroke-width", 2.5)
-        .attr("d", d3.line()
-          .x(d => x(d.year))
-          .y(d => y(d.value))
-          .curve(d3.curveMonotoneX)
-        );
-
-      // dot
-      svg.selectAll(`.dot-${idx}`)
-        .data(lineData)
-        .enter().append("circle")
-        .attr("cx", d => x(d.year))
-        .attr("cy", d => y(d.value))
-        .attr("r", 3)
-        .attr("fill", colors[idx]);
-    });
 
     svg.append("g")
       .attr("transform", `translate(0,${height})`)
@@ -709,6 +755,32 @@ async function drawEmissionChart(countryName) {
 
     svg.append("g")
       .call(d3.axisLeft(y));
+
+    /* ======================
+       LINES
+    ====================== */
+
+    seriesNames.forEach((name, i) => {
+      const lineData = data.map(d => ({
+        year: d.year,
+        value: d[name] || 0
+      }));
+
+      svg.append("path")
+        .datum(lineData)
+        .attr("fill", "none")
+        .attr("stroke", colors[i])
+        .attr("stroke-width", 2.5)
+        .attr("d", d3.line()
+          .x(d => x(d.year))
+          .y(d => y(d.value))
+          .curve(d3.curveMonotoneX)
+        );
+    });
+
+    /* ======================
+       LABELS
+    ====================== */
 
     svg.append("text")
       .attr("x", width / 2)
@@ -721,24 +793,159 @@ async function drawEmissionChart(countryName) {
       .attr("x", -height / 2)
       .attr("y", -45)
       .attr("text-anchor", "middle")
-      .text("CO₂ Emissions (Mt CO2e)");
+      .text(`${emissionType} Emissions (Mt CO2e)`);
 
-    // Legend
+    /* ======================
+       LEGEND
+    ====================== */
+
     const legend = svg.selectAll(".legend")
       .data(seriesNames)
-      .enter().append("g")
-      .attr("transform", (d, i) => `translate(${width + 20},${20 + i*20})`);
+      .enter()
+      .append("g")
+      .attr("transform", (d, i) => `translate(${width + 20},${20 + i * 20})`);
 
     legend.append("rect")
-      .attr("width", 12).attr("height", 12)
-      .attr("fill", (d,i) => colors[i]);
+      .attr("width", 12)
+      .attr("height", 12)
+      .attr("fill", (d, i) => colors[i]);
 
     legend.append("text")
       .attr("x", 18)
       .attr("y", 10)
       .text(d => d);
+
   } catch (err) {
-    console.error("Error loading emission data:", err);
+    console.error(err);
     emissionDiv.append("p").text("Failed to load emission data.");
   }
+}
+
+async function drawEmissionPieChart(countryName, year) {
+  const pollutant = ['Industrial Combustion', 'Transport', 'Power Industry', 'Building'];
+  const PIE_COLORS = [
+    "#4C6A92",
+    "#7A8F7A",
+    "#9FA6B2"
+  ];
+
+  const PIE_CATEGORIES = [
+    "CO2",
+    "N2O",
+    "CH4"
+  ]
+
+  const container = d3.select("#emissionPieChart");
+  container.selectAll("*").remove(); 
+  
+    for (let i = 0; i < pollutant.length; i++) {
+      const files = PIE_CATEGORIES.map(c =>
+      `Dataset/Environment/Urban developement (${c}) emissions from ${pollutant[i]} (Energy) (Mt CO2e).csv`
+      );
+    try {
+      const datasets = await Promise.all(files.map(f => d3.csv(f)));
+      const pieData = [];
+
+      datasets.forEach((dataset, i) => {
+        const row = dataset.find(d => d["Country Name"] === countryName);
+        console.log(row);
+        if (!row || !row[year] || row[year] === "") return;
+
+        pieData.push({
+          category: PIE_CATEGORIES[i],
+          value: +row[year]
+        });
+      });
+
+      if (!pieData.length) {
+        container.append("pollutant[i]").text("No emission data available.");
+        return;
+      }
+
+      /* ======================
+        SVG SETUP
+      ====================== */
+
+      const width = 220;
+      const height = 220;
+      const radius = Math.min(width, height) / 2 - 20;
+      const svg = container.append("svg")
+      .attr("width", width)
+      .attr("height", height)
+      .append("g")
+      .attr("transform", `translate(${width / 2},${height / 2})`);
+
+      const color = d3.scaleOrdinal()
+          .domain(PIE_CATEGORIES)
+          .range(PIE_COLORS);
+
+
+
+      const pie = d3.pie()
+        .value(d => d.value)
+        .sort(null);
+
+      const arc = d3.arc()
+        .innerRadius(0)
+        .outerRadius(radius);
+
+      /* ======================
+        DRAW PIE
+      ====================== */
+
+      svg.selectAll("path")
+        .data(pie(pieData))
+        .enter()
+        .append("path")
+        .attr("d", arc)
+        .attr("fill", d => color(d.data.category))
+        .attr("stroke", "#fff")
+        .style("stroke-width", "2px");
+
+      /* ======================
+        LABELS (CENTER)
+      ====================== */
+      const pieWrapper = container.append("div")
+      .style("width", "120px")
+      .style("text-align", "center");
+
+      pieWrapper.append("div")
+        .style("font-size", "14px")
+        .style("font-weight", "600")
+        .style("margin-bottom", "15px")
+        .text(`${pollutant[i]} emission in ${year}`);
+      
+
+      /* ======================
+        LEGEND
+      ====================== */
+      const legend = pieWrapper.append("div")
+        .style("margin-top", "6px")
+        .style("font-size", "12px");
+
+      const legendItem = legend.selectAll(".legend-item")
+        .data(pieData)
+        .enter()
+        .append("div")
+        .style("display", "flex")
+        .style("align-items", "center")
+        .style("justify-content", "center")
+        .style("gap", "6px");
+
+      legendItem.append("span")
+        .style("width", "12px")
+        .style("height", "12px")
+        .style("background-color", d => color(d.category))
+        .style("display", "inline-block");
+
+      legendItem.append("span")
+        .text(d => d.category);
+
+    }
+    
+  catch (err) {
+    console.error(err);
+    container.append("p").text("Failed to load pie chart data.");
+  }
+  } 
 }

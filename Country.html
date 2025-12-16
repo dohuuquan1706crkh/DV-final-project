@@ -57,6 +57,17 @@
     .nav-tabs .nav-link:hover {
       background-color: #f1f1f1;
     }
+    #gdpChart {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px; /* Optional: adds space between the charts */
+    }
+
+    #gdpChart svg {
+      flex: 1;
+      max-width: 100%; /* Ensures the charts scale to fit the container */
+        height: 500px;
+    }
 
   </style>
 </head>
@@ -76,13 +87,7 @@
         <a class="nav-link active" id="population-tab" data-bs-toggle="tab" href="#population" role="tab" aria-controls="population" aria-selected="true">Overview</a>
       </li>
       <li class="nav-item" role="presentation">
-        <a class="nav-link" id="gdp-tab" data-bs-toggle="tab" href="#gdp" role="tab" aria-controls="gdp" aria-selected="false">GDP</a>
-      </li>
-      <li class="nav-item" role="presentation">
-        <a class="nav-link" id="co2-emission-tab" data-bs-toggle="tab" href="#co2-emission" role="tab" aria-controls="co2-emission" aria-selected="false">Emission</a>
-      </li>
-      <li class="nav-item" role="presentation">
-        <a class="nav-link" id="food-production" data-bs-toggle="tab" href="#food-production" role="tab" aria-controls="food-production" aria-selected="false">Food Production</a>
+        <a class="nav-link" id="gdp-tab" data-bs-toggle="tab" href="#gdp" role="tab" aria-controls="gdp" aria-selected="false">Comparation</a>
       </li>
     </ul>
 
@@ -108,19 +113,22 @@
         </div>
           <div class="chart-box">
           <h3>Emission Details</h3>
+        <select id="emissionType"  style="width: 250px;" class="form-select form-select-lg mb-3" aria-label="Large select example" onkeydown="handleKeyEvent(event);">
+          <option value="CO2">CO2</option>
+          <option value="N2O">N2O</option>
+          <option value="CH4">CH4</option>
+        </select>
           <div id="emissionChart"></div>
-          <div id="co2Chart"></div>
+
+          <input id="yearInput-scatter" type="number" value="2020" min="1975" max="2025" class="form-control form-control-sm" style="width:100px;" />
+          <button id="updateBtn-scatter" class="btn btn-secondary btn-sm">Update</button>
+          <div id="emissionPieChart" style="display:flex; gap:20px;"></div>
+
+
+
+          <!-- <div id="co2Chart"></div> -->
         </div>
-      </div>
-
-      <!-- GDP Tab -->
-      <div class="tab-pane fade" id="gdp" role="tabpanel" aria-labelledby="gdp-tab">
-        
-      </div>
-
-      <!-- CO₂ Emission Tab -->
-      <div class="tab-pane fade" id="co2-emission" role="tabpanel" aria-labelledby="co2-emission-tab">
-
+        </div>
       </div>
 
   <!-- Include D3.js and Custom Scripts -->

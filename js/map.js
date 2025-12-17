@@ -60,28 +60,6 @@ function drawMap(world) {
     .attr('stroke-width', 0.5);
 }
 
-// -------------------------------------
-// DEBUG
-// -------------------------------------
-
-d3.json(GEOJSON_URL).then(world => {
-    countriesData = world.features;
-
-    // DEBUG: list all country names
-    const countryNames = world.features
-        .map(d => d.properties.name)
-        .filter(d => d); // remove undefined/null
-
-    console.log('Total countries:', countryNames.length);
-    console.log('Country names:', countryNames);
-
-    drawMap(world);
-});
-// -------------------------------------
-// DEBUG
-// -------------------------------------
-
-
 // Zoom & pan
 const zoom = d3.zoom()
     .scaleExtent([1, 8])

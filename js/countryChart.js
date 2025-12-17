@@ -200,7 +200,7 @@ function createHeatMap(countryData) {
     });
 
     const margin = { top: 50, right: 110, bottom: 50, left: 80 },
-          width = 800 - margin.left - margin.right,
+          width = 860 - margin.left - margin.right,
           height = 400 - margin.top - margin.bottom;
 
     const legendWidth = 20;
@@ -485,8 +485,13 @@ function updatePyramidData(pyramidData) {
 }
 
 document.getElementById("updateBtn-pyramid").addEventListener("click", () => {
+  const yearInput = document.getElementById("yearInput-pyramid");
   const raw = parseInt(document.getElementById("yearInput-pyramid").value);
-  const year = Number.isFinite(raw) ? raw : 2020;
+  const year = (Number.isFinite(raw) && raw >= 1960 && raw <= 2024) ? raw : 2020;
+
+  if (year !== raw) {
+    yearInput.value = year; // cập nhật input về giá trị mặc định
+  }
 
   const pyramidData = transformDataForPyramid(ctx.genderData, countryName, year);
   updatePyramidData(pyramidData);
@@ -548,14 +553,10 @@ async function drawGDPChart(countryName) {
       .range([height, 0]);
 
     const yGrowth = d3.scaleLinear()
-      .domain(d3.extent(growth, d => d.value))
+      .domain([Math.min(0,d3.min(growth, d => d.value)), Math.max(0,d3.max(growth, d => d.value))])
       .nice()
       .range([height, 0]);
 
-    // Scale used ONLY for horizon band height
-    const bandScale = d3.scaleLinear()
-      .domain([0, bandSize])
-      .range([0, height / 2]);
      // ---------- Horizon graph ----------
     const zeroY = yGrowth(0);
 
@@ -571,11 +572,9 @@ async function drawGDPChart(countryName) {
         .x(d => x(d.year))
         .y0(zeroY)
         .y1(d => {
-          const raw = positive ? d.value : -d.value;
-          const bandValue = raw - bandIndex * bandSize;
-          const v = Math.max(0, Math.min(bandSize, bandValue));
-          const h = bandScale(v);
-          return positive ? zeroY - h : zeroY + h;
+          if (positive)
+           return yGrowth(Math.max(0,d.value));
+          else return yGrowth(Math.min(0,d.value));
         })
         .curve(d3.curveMonotoneX);
 
@@ -595,8 +594,6 @@ async function drawGDPChart(countryName) {
         .ease(d3.easeCubicOut)
         .attr("stroke-dashoffset", 0);
     }
-
-
     // Positive bands
     drawHorizonBand(growth, 0, "#b1e6ffff", true);
 
@@ -1249,6 +1246,6 @@ function animateNumber(el, start, end, duration = 800) {
       };
     });
 }
-animateNumber("#kpi-food-agri", 0, latestFood.value);
-animateNumber("#kpi-crop", 0, latestCrop.value);
+// animateNumber("#kpi-food-agri", 0, latestFood.value);
+// animateNumber("#kpi-crop", 0, latestCrop.value);
 

@@ -34,7 +34,7 @@
   <section id="mapSection" class="pt-3">
     <!-- Title -->
     <div class="text-center mb-2">
-      <h2 class="fw-bold text-muted">World Map</h2>
+      <h2 class="fw-bold">World Map</h2>
       <p class="text-secondary">
         Click on a country to see detailed indicators. You can search the country name at the search bar.
       </p>
@@ -66,6 +66,8 @@
             population, economy, and agriculture. Users can interact with the world map,
             analyze scatter plots across different years and sectors, and gain insights
             into country-level development trends.
+            <br>
+            Let's see how the world evolves!
           </p>
         </div>
       </div>
@@ -90,6 +92,9 @@
       <div class="mb-2 text-center">Modify the year or the section and click on the update button!</div>
       <div id="scatterContainer" class="d-flex flex-column align-items-center ">
         <svg id="scatterSvg" width="1400" height="800"></svg>
+        <small class="text-muted mt-2 mt-4">
+          Hover over a point to see detailed information.
+        </small>
         <div class="mt-3 d-flex gap-2 align-items-center">
           <select
             id="sectorSelect"
@@ -112,10 +117,18 @@
   <section id="populationCharts" class="py-5 bg-light">
     <div class="container">
       <h2 class="mb-3 text-center">Population distribution</h2>
-      <!-- <p>Content for other charts can go here...</p> -->
+       <p class="text-center text-muted mb-4">
+        This section visualizes the population distribution across countries for a selected year.<br>
+        Each circle represents a country, allowing comparison of population size and structure over time.
+      </p>
     </div>
+    
     <div id="scatterContainer" class="d-flex flex-column align-items-center ">
         <svg id="populationSvg" width="800" height="800"></svg>
+        <!-- Chart note -->
+        <small class="text-muted mt-2">
+          Hover over a circle to see detailed population information.
+        </small>
         <div class="mt-3 d-flex gap-2 align-items-center">
           <input id="yearInput-population" type="number" value="2020" min="1900" max="2025" class="form-control form-control-sm" style="width:100px;" />
           <button id="updateBtn-population" class="btn btn-secondary btn-sm">Update</button>
@@ -123,6 +136,7 @@
       </div>
   </section>
 
+  <!-- Footer -->
   <footer class="bg-dark text-light pt-5 pb-3">
     <div class="container">
       <div class="row">
@@ -178,7 +192,7 @@
         <!-- Contact -->
         <div class="col-md-3 mb-4">
           <h5 class="fw-bold">Contact</h5>
-          <p class="text-secondary mb-1">For questions or feedback:</p>
+          <p class="text-secondary mb-1">Visit our project:</p>
           <p class="mb-1">
             🔗 <a href="https://github.com/dohuuquan1706crkh/DV-final-project/tree/master"
                   target="_blank"

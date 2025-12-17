@@ -140,12 +140,19 @@ function drawPopulationPacking(year) {
     svg.selectAll("*").remove();
 
     // Convert sang cấu trúc hierarchy mà d3.pack yêu cầu
+
+    const rScale = d3.scaleSqrt()
+        .domain([0, d3.max(data, d => d.population)])
+        .range([10, 1000000]); // 5 là min radius
+
     const root = d3.pack()
         .size([width, height])
-        .padding(3)(
+        .padding(3)
+        (
         d3.hierarchy({ children: data })
-          .sum(d => d.population)
-    );
+          .sum(d => rScale(d.population))
+        )
+    ;
 
     const nodes = svg.selectAll("g.node")
         .data(root.leaves())
@@ -260,8 +267,8 @@ function drawScatterForYear(year, section = "economy") {
     if (section === "economy") {
         dataX = ctx.gdpData;
         dataY = ctx.growthData;
-        labelX = "GDP";
-        labelY = "GDP growth";
+        labelX = "GDP (current US$)";
+        labelY = "GDP growth (%)";
     } else if (section === "agriculture") {
         dataX = ctx.crop;
         dataY = ctx.food;
@@ -406,7 +413,14 @@ function drawScatterForYear(year, section = "economy") {
 
     // ---------------------------
     // LINEAR REGRESSION
-    const lr = linearRegression(mergedWithFlags);
+    // const lr = linearRegression(mergedWithFlags);
+    const lr = linearRegression(
+        mergedWithFlags.map(d => ({
+            xVal: Math.log10(d.xVal),  // hoặc Math.log
+            yVal: d.yVal
+        }))
+    );
+
 
     if (lr) {
         const xDomain = x.domain(); // [xmin, xmax]
@@ -414,11 +428,13 @@ function drawScatterForYear(year, section = "economy") {
         const regressionData = [
             {
                 xVal: xDomain[0],
-                yVal: lr.slope * xDomain[0] + lr.intercept
+                yVal: lr.slope * Math.log10(xDomain[0]) + lr.intercept
+                // yVal: lr.slope * xDomain[0] + lr.intercept
             },
             {
                 xVal: xDomain[1],
-                yVal: lr.slope * xDomain[1] + lr.intercept
+                yVal: lr.slope * Math.log10(xDomain[1]) + lr.intercept
+                // yVal: lr.slope * xDomain[1] + lr.intercept
             }
         ];
 

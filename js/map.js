@@ -92,132 +92,395 @@ searchInput.on('keyup', (event) => {
 });
 
 // ----------------------------------------
-// Draw gdp
+// LOAD DATA
 // ----------------------------------------
 
 Promise.all([
     loadWDIcsv("data/Economy/Economy_GDP (current US$).csv"),
-    loadWDIcsv("data/Economy/Economy_GDP growth (annual _).csv")
-]).then(([gdpData, growthData]) => {
+    loadWDIcsv("data/Economy/Economy_GDP growth (annual _).csv"),
+    loadWDIcsv("data/Agriculture/Agriculture and Rural development_Crop production index (2014-2016 = 100).csv"),
+    loadWDIcsv("data/Agriculture/Agriculture and Rural development_Food production index (2014-2016 = 100).csv"),
+    loadWDIcsv("data/Health/total_population.csv")
+]).then(([gdpData, growthData, crop, food, totalPop]) => {
     ctx.gdpData = gdpData;
     ctx.growthData = growthData;
+    ctx.crop = crop;
+    ctx.food = food;
+    ctx.totalPop = totalPop;
 
-    drawScatterForYear(2020);   // ví dụ chọn năm 2020
+    drawScatterForYear(2020, "economy");   // ví dụ chọn năm 2020
+    drawPopulationPacking(2020);
+
 });
 
-function drawScatterForYear(year) {
-    const svg = d3.select("#scatterSvg");
+// ----------------------------------------
+// DRAW POPULATION
+// ----------------------------------------
+function drawPopulationPacking(year) {
+    const width = 800;
+    const height = 800;
+
+    // data processing
+    data = ctx.totalPop
+        .map(row => {
+            const name = row["Country Name"];
+            const code = row["Country Code"];
+            const population = +row[year.toString()]; 
+
+            return {
+                name,
+                code,
+                population
+            };
+        })
+        .filter(d => d.population > 0 && Number.isFinite(d.population) && flagURL(d.code));;
+
+
+    const svg = d3.select("#populationSvg");
     svg.selectAll("*").remove();
 
+    // Convert sang cấu trúc hierarchy mà d3.pack yêu cầu
+
+    const rScale = d3.scaleSqrt()
+        .domain([0, d3.max(data, d => d.population)])
+        .range([10, 1000000]); // 5 là min radius
+
+    const root = d3.pack()
+        .size([width, height])
+        .padding(3)
+        (
+        d3.hierarchy({ children: data })
+          .sum(d => rScale(d.population))
+        )
+    ;
+
+    const nodes = svg.selectAll("g.node")
+        .data(root.leaves())
+        .enter()
+        .append("g")
+        .attr("class", "node")
+        .attr("transform", d => `translate(${d.x},${d.y})`);
+
+    // 1. Tạo clipPath cho mỗi node để ảnh cờ bị cắt theo hình tròn
+    nodes.append("clipPath")
+        .attr("id", d => `pop-clip-${d.data.code}`)
+        .append("circle")
+        .attr("r", d => d.r);
+
+    // 2. Chèn ảnh cờ, sử dụng clip-path
+    nodes.append("image")
+        .attr("href", d => flagURL(d.data.code)) // hàm bạn đã có
+        .attr("width", d => d.r * 2)
+        .attr("height", d => d.r * 2)
+        .attr("x", d => -d.r)
+        .attr("y", d => -d.r)
+        .attr("clip-path", d => `url(#pop-clip-${d.data.code})`)
+        .attr("preserveAspectRatio", "xMidYMid slice");
+
+    // Hình tròn
+    nodes.append("circle")
+        .attr("r", d => d.r)
+        .attr("fill", "none")
+        .attr("stroke", "gray")
+        .attr("stroke-width", 1.5);;
+
+    // Tooltip
+    // nodes.append("title")
+    //     .text(d => `${d.data.name}\nPopulation: ${d.data.population.toLocaleString()}`);
+
+    nodes.on("mouseover", (event, d) => {
+            tooltip.style("display", "block")
+                .html(`<strong>${d.data.name}</strong><br>Population: ${d.data.population.toLocaleString()}`);
+        })
+        .on("mousemove", (event) => {
+            tooltip.style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY + 10) + "px");
+        })
+        .on("mouseout", () => tooltip.style("display", "none"));
+}
+
+// ----------------------------------------
+// Linear regression
+// ----------------------------------------
+
+function linearRegression(data) {
+    const n = data.length;
+    if (n < 2) return null;
+
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+
+    data.forEach(d => {
+        sumX += d.xVal;
+        sumY += d.yVal;
+        sumXY += d.xVal * d.yVal;
+        sumX2 += d.xVal * d.xVal;
+    });
+
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    return { slope, intercept };
+}
+
+// ----------------------------------------
+// DRAW Scatter
+// ----------------------------------------
+
+const scatterSvg = d3.select("#scatterSvg")
+    .attr("width", 1400)
+    .attr("height", 800);
+
+const scatterG = scatterSvg.append("g").attr("class", "plot");
+const xAxisG = scatterSvg.append("g").attr("class", "x-axis");
+const yAxisG = scatterSvg.append("g").attr("class", "y-axis");
+const titleG = scatterSvg.append("text").attr("class", "title");
+const defs = scatterSvg.append("defs");
+
+// linear regression settup
+const regressionLine = scatterG
+    .append("line")
+    .attr("class", "regression-line")
+    .attr("stroke", "crimson")
+    .attr("stroke-width", 2)
+    .attr("stroke-dasharray", "6 4")
+    .attr("opacity", 0);
+
+
+function ensureClip(code, r = 8) {
+    if (!defs.select(`#clip-${code}`).node()) {
+        const cp = defs.append("clipPath")
+            .attr("id", `clip-${code}`)
+            .attr("clipPathUnits", "userSpaceOnUse");
+
+        cp.append("circle")
+            .attr("cx", 0)
+            .attr("cy", 0)
+            .attr("r", r);
+    }
+}
+
+function drawScatterForYear(year, section = "economy") {
     const yearStr = String(year);
 
-    // Merge dữ liệu theo Country Code
+    // Chọn dữ liệu theo section
+    let dataX, dataY, labelX, labelY;
+    if (section === "economy") {
+        dataX = ctx.gdpData;
+        dataY = ctx.growthData;
+        labelX = "GDP (current US$)";
+        labelY = "GDP growth (%)";
+    } else if (section === "agriculture") {
+        dataX = ctx.crop;
+        dataY = ctx.food;
+        labelX = "Crop production";
+        labelY = "Food growth";
+    } else {
+        console.error("Unknown section:", section);
+        return;
+    }
+
+    // Merge dữ liệu
     const merged = [];
+    dataX.forEach(dX => {
+        const code = dX["Country Code"];
+        const dY = dataY.find(d => d["Country Code"] === code);
+        if (!dY) return;
 
-    ctx.gdpData.forEach(g => {
-        const code = g["Country Code"];
-        const growthRow = ctx.growthData.find(d => d["Country Code"] === code);
-        if (!growthRow) return;
-
-        let gdp = +g[yearStr];
-        let growth = +growthRow[yearStr];
-
-        if (gdp == 0) return;     // elimate value with 0 gdp
+        const xVal = +dX[yearStr];
+        const yVal = +dY[yearStr];
+        if (xVal <= 0 || !Number.isFinite(yVal)) return;
 
         merged.push({
-            name: g["Country Name"],
-            code: code,
-            gdp: gdp,
-            growth: growth
+            name: dX["Country Name"],
+            code,
+            xVal,
+            yVal
         });
     });
 
-    // Setup scale
-    const width = 900;
+    const width = 1400;
     const height = 800;
-    const margin = {top: 40, right: 40, bottom: 60, left: 80};
+    const margin = { top: 40, right: 40, bottom: 60, left: 80 };
 
-    console.log(merged);
-
-    const x = d3.scaleLog()   // GDP scale dạng log cho đẹp
-        .domain(d3.extent(merged, d => d.gdp))
+    const x = d3.scaleLog()
+        .domain(d3.extent(merged, d => d.xVal))
         .range([margin.left, width - margin.right]);
 
     const y = d3.scaleLinear()
-        .domain(d3.extent(merged, d => d.growth))
+        .domain(d3.extent(merged, d => d.yVal))
+        .nice()
         .range([height - margin.bottom, margin.top]);
 
-    // Axes
-    svg.append("g")
-        .attr("transform", `translate(0,${height - margin.bottom})`)
-        .call(d3.axisBottom(x).ticks(10, "~s"));
+    const t = scatterSvg.transition().duration(750).ease(d3.easeCubicOut);
 
-    svg.append("g")
+    // Axis transition
+    xAxisG
+        .attr("transform", `translate(0,${height - margin.bottom})`)
+        .transition(t)
+        .call(d3.axisBottom(x).ticks(10, "~s"));
+        
+
+    yAxisG
         .attr("transform", `translate(${margin.left},0)`)
+        .transition(t)
         .call(d3.axisLeft(y));
 
-    // Labels
-    svg.append("text")
-        .attr("x", width/2)
-        .attr("y", height - 15)
+        // Label trục X
+    xAxisG.selectAll(".axis-label").remove();
+    xAxisG.append("text")
+        .attr("class", "axis-label")
+        .attr("x", (width - margin.left - margin.right)/2 + margin.left)
+        .attr("y", 40) // cách trục X 50px
         .attr("text-anchor", "middle")
-        .text(`GDP (current US$), year ${year}`);
+        .attr("fill", "black")
+        .style("font-size", "16px")
+        .text(labelX);
 
-    svg.append("text")
-        .attr("x", -height/2)
-        .attr("y", 20)
-        .attr("transform", "rotate(-90)")
+    // Label trục Y
+    yAxisG.selectAll(".axis-label").remove();
+    yAxisG.append("text")
+        .attr("class", "axis-label")
+        .attr("transform", `rotate(-90)`)
+        .attr("x", -(height - margin.top - margin.bottom)/2 - margin.top)
+        .attr("y", -40) // cách trục Y 60px sang trái
         .attr("text-anchor", "middle")
-        .text(`GDP growth %, year ${year}`);
+        .attr("fill", "black")
+        .style("font-size", "16px")
+        .text(labelY);
 
-    svg.append("text")
-        .attr("x", width / 2)      // căn giữa theo chiều ngang
-        .attr("y", 25)             // cách trên SVG 25px
+
+    // Title
+    titleG
+        .attr("x", width / 2)
+        .attr("y", 25)
         .attr("text-anchor", "middle")
-        .attr("font-size", "18px")
-        .attr("font-weight", "bold")
-        .text(`Scatter plot of GDP vs GDP growth, year ${year}`);
+        .transition(t)
+        .text(`${labelX} vs ${labelY}, year ${year}`);
 
-    const defs = svg.append("defs");
+    // Points
+    const mergedWithFlags = merged.filter(d => flagURL(d.code));
 
-    svg.selectAll("g.flagPoint")
-        .data(merged)
-        .enter()
-        .each(function (d) {
-            const cx = x(d.gdp);
-            const cy = y(d.growth);
-            const r = 8;
+    const points = scatterG
+        .selectAll("g.point")
+        .data(mergedWithFlags, d => d.code);
 
-            // tạo clipPath
-            defs.append("clipPath")
-                .attr("id", `clip-${d.code}`)
-                .append("circle")
-                .attr("cx", cx)
-                .attr("cy", cy)
-                .attr("r", r);
+    points.exit()
+        .transition(t)
+        .style("opacity", 0)
+        .remove();
 
-            // vẽ flag
-            svg.append("image")
-                .attr("href", flagURL(d.code))
-                .attr("x", cx - r)
-                .attr("y", cy - r)
-                .attr("width", r * 2)
-                .attr("height", r * 2)
-                .attr("clip-path", `url(#clip-${d.code})`)
-                .attr("preserveAspectRatio", "xMidYMid slice")
-                .append("title")  // thêm title
-                .text(`${d.name}\nGDP: ${d.gdp}\nGrowth: ${d.growth}`);;
+    const pointsEnter = points.enter()
+        .append("g")
+        .attr("class", "point")
+        .attr("transform", d => `translate(${x(d.xVal)}, ${y(d.yVal)})`)
+        .style("opacity", 0);
 
-            // viền trắng
-            svg.append("circle")
-                .attr("cx", cx)
-                .attr("cy", cy)
-                .attr("r", r)
-                .attr("fill", "none")
-                .attr("stroke", "gray")
-                .attr("stroke-width", 1.5);
-        });
+    const radius = 8;
+    pointsEnter.each(d => ensureClip(d.code, radius));
+
+    pointsEnter.append("image")
+        .attr("href", d => flagURL(d.code) || "")
+        .attr("x", -radius)
+        .attr("y", -radius)
+        .attr("width", radius * 2)
+        .attr("height", radius * 2)
+        .attr("clip-path", d => `url(#clip-${d.code})`)
+        .attr("preserveAspectRatio", "xMidYMid slice");
+
+    // Rebind the new data
+    const allPoints = pointsEnter.merge(points);
+    allPoints.select("image")
+        .on("mouseover", (event, d) => {
+            tooltip.style("display", "block")
+                .html(`<strong>${d.name}</strong><br>${labelX}: ${d.xVal}<br>${labelY}: ${d.yVal}`);
+        })
+        .on("mousemove", (event) => {
+            tooltip.style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY + 10) + "px");
+        })
+        .on("mouseout", () => tooltip.style("display", "none"));
+
+    pointsEnter.append("circle")
+        .attr("r", radius)
+        .attr("fill", "none")
+        .attr("stroke", "gray")
+        .style("pointer-events", "none");
+
+    pointsEnter.merge(points)
+        .transition(t)
+        .style("opacity", 1)
+        .attr("transform", d => `translate(${x(d.xVal)}, ${y(d.yVal)})`);
+
+    // ---------------------------
+    // LINEAR REGRESSION
+    // const lr = linearRegression(mergedWithFlags);
+    const lr = linearRegression(
+        mergedWithFlags.map(d => ({
+            xVal: Math.log10(d.xVal),  // hoặc Math.log
+            yVal: d.yVal
+        }))
+    );
+
+
+    if (lr) {
+        const xDomain = x.domain(); // [xmin, xmax]
+
+        const regressionData = [
+            {
+                xVal: xDomain[0],
+                yVal: lr.slope * Math.log10(xDomain[0]) + lr.intercept
+                // yVal: lr.slope * xDomain[0] + lr.intercept
+            },
+            {
+                xVal: xDomain[1],
+                yVal: lr.slope * Math.log10(xDomain[1]) + lr.intercept
+                // yVal: lr.slope * xDomain[1] + lr.intercept
+            }
+        ];
+
+        regressionLine
+            .transition(t)
+            .attr("opacity", 1)
+            .attr("x1", x(regressionData[0].xVal))
+            .attr("y1", y(regressionData[0].yVal))
+            .attr("x2", x(regressionData[1].xVal))
+            .attr("y2", y(regressionData[1].yVal));
+    } else {
+        regressionLine
+            .transition(t)
+            .attr("opacity", 0);
+    }
 }
+
+// ----------------------------------------
+// Update button for population plot
+// ----------------------------------------
+
+
+document.getElementById("updateBtn-population").addEventListener("click", () => {
+    const raw = parseInt(document.getElementById("yearInput-population").value);
+    const year = Number.isFinite(raw) ? raw : 2020;   // fallback
+    drawPopulationPacking(year);
+});
+
+// ----------------------------------------
+// Update button for scatter plot
+// ----------------------------------------
+
+
+document.getElementById("updateBtn-scatter").addEventListener("click", () => {
+    const raw = parseInt(document.getElementById("yearInput-scatter").value);
+    const year = Number.isFinite(raw) ? raw : 2020;   // fallback
+    const sector = document.getElementById("sectorSelect").value;
+
+    if (sector === "economy") {
+        console.log("Drawing scatter economy for year:", year);
+        drawScatterForYear(year, "economy");
+    } else {
+        console.log("Drawing scatter agriculture for year:", year);
+        drawScatterForYear(year, "agriculture");
+    }
+});
 
 // ----------------------------------------
 // Process file
@@ -474,4 +737,4 @@ function flagURL(alpha3) {
     const a2 = alpha3to2[alpha3];
     if (!a2) return null;     // region → không có cờ
     return `data/flags/${a2.toLowerCase()}.png`;
-}
+};

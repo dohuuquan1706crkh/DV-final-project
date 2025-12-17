@@ -7,10 +7,10 @@ const AGE_GROUPS = [
 const ctx = {};
 let pieCharts = []; // store references to each pie
 async function showCharts(countryName) {
+  await loadKPIs(countryName);
   await drawPopulationPyramid(countryName);
   await drawGDPChart(countryName);
   await drawAgricultureChart(countryName);
-  await drawCO2Chart(countryName);
   
   let emissionType = "CO2";
   drawEmissionChart(countryName, emissionType);
@@ -36,12 +36,80 @@ async function showCharts(countryName) {
 
 }
 
+async function loadKPIs(countryName) {
+  const YEAR = "2024";
+
+  /* ======================
+     Population (total)
+  ====================== */
+  const popCSV = await d3.csv(
+    "Dataset/Health/total_population.csv"
+  );
+  const popRow = popCSV.find(d => d["Country Name"] === countryName);
+  const population = popRow && popRow[YEAR]
+    ? +popRow[YEAR]
+    : null;
+
+  /* ======================
+     GDP & GDP growth
+  ====================== */
+  const gdpCSV = await d3.csv(
+    "Dataset/Economy/Economy_GDP(current US$).csv"
+  );
+  const growthCSV = await d3.csv(
+    "Dataset/Economy/Economy_GDP growth (annual _).csv"
+  );
+
+  const gdpRow = gdpCSV.find(d => d["Country Name"] === countryName);
+  const growthRow = growthCSV.find(d => d["Country Name"] === countryName);
+
+  const gdp = gdpRow && gdpRow[YEAR] ? +gdpRow[YEAR] : null;
+  const gdpGrowth = growthRow && growthRow[YEAR]
+    ? +growthRow[YEAR]
+    : null;
+
+/* ======================
+   Food Production Index
+====================== */
+  const foodCSV = await d3.csv(
+    "Dataset/Agriculture/Agriculture and Rural development_Food production index (2014-2016 = 100).csv"
+  );
+
+  const foodRow = foodCSV.find(d => d["Country Name"] === countryName);
+
+  const foodIndex = foodRow && foodRow[YEAR-2]
+    ? +foodRow[YEAR-2]
+    : null;
+  console.log("foodIndex");
+  console.log(foodRow);
+
+  /* ======================
+     Render KPIs
+  ====================== */
+  document.getElementById("kpi-population").textContent =
+    population
+      ? d3.format(",")(population)
+      : "N/A";
+
+  document.getElementById("kpi-gdp").textContent =
+    gdp
+      ? `$${d3.format(".2s")(gdp)}`
+      : "N/A";
+
+  document.getElementById("kpi-gdp-growth").textContent =
+    gdpGrowth !== null
+      ? `${gdpGrowth.toFixed(2)}%`
+      : "N/A";
+
+document.getElementById("kpi-food").textContent =
+  foodIndex !== null ? d3.format(".1f")(foodIndex) : "N/A";
+}
+
 async function drawPopulationPyramid(countryName) {
   const pyramidDiv = d3.select("#pyramidChart");
   pyramidDiv.selectAll("*").remove(); // Clear existing chart
 
   try {
-    // Load male + female data cho tất cả age groups
     const rawData = await Promise.all(
       AGE_GROUPS.map(async ageGroup => {
         const [maleData, femaleData] = await Promise.all([
@@ -49,7 +117,6 @@ async function drawPopulationPyramid(countryName) {
           d3.csv(`DataSet/Health/Health_Population_ages_${ageGroup === "80+" ? "80_and_above" : ageGroup}_female_of_female_population.csv`)
         ]);
 
-        // Tạo array mới với trung bình phần trăm male/female
         const combinedData = maleData.map((row, i) => {
           const femaleRow = femaleData[i];
           const combinedRow = { ...row };
@@ -70,19 +137,14 @@ async function drawPopulationPyramid(countryName) {
       })
     );
 
-    // Vẽ time serie cho các năm
     const totalData = rawData.map(group => ({
       ageGroup: group.ageGroup,
       data: group.total
     }));
 
-    // console.log("total data");
-    // console.log(totalData);
 
     ctx.heatData = transformDataForHeatmap(totalData, countryName);
     createHeatMap(ctx.heatData);
-
-    // Vẽ cho một năm biểu đồ piramid
 
     ctx.genderData = rawData.map(group => ({
       ageGroup: group.ageGroup,
@@ -91,7 +153,6 @@ async function drawPopulationPyramid(countryName) {
     }));
 
     const pyramidData = transformDataForPyramid(ctx.genderData, countryName, 2020);
-    // createPyramidData(pyramidData);
     initPyramidChart();
     updatePyramidData(pyramidData);
 
@@ -124,7 +185,6 @@ function transformDataForHeatmap(file, countryName) {
 }
 
 function createHeatMap(countryData) {
-  // Chuyển dữ liệu từ object -> array để dễ vẽ
     const data = [];
     countryData.forEach(d => {
         const age = d.ageGroup;
@@ -139,10 +199,9 @@ function createHeatMap(countryData) {
         }
     });
 
-    // Kích thước chart
     const margin = { top: 50, right: 110, bottom: 50, left: 80 },
           width = 800 - margin.left - margin.right,
-          height = 500 - margin.top - margin.bottom;
+          height = 400 - margin.top - margin.bottom;
 
     const legendWidth = 20;
     const legendHeight = 200;
@@ -281,7 +340,7 @@ function initPyramidChart() {
 
   const margin = { top: 50, right: 30, bottom: 75, left: 40 };
   width = 420 - margin.left - margin.right;
-  height = 500 - margin.top - margin.bottom;
+  height = 400 - margin.top - margin.bottom;
 
   pyramidSvg = container
     .append("svg")
@@ -422,15 +481,6 @@ function updatePyramidData(pyramidData) {
         .attr("width", d => xScale(d.female) - xScale(0))
         .attr("height", yScale.bandwidth())
     );
-  //   chart.paths
-  // .data(newData)
-  // .transition()
-  // .duration(750)
-  // .attrTween("d", function (d) {
-  //   const i = d3.interpolate(this._current, d);
-  //   this._current = i(1);
-  //   return t => chart.arc(i(t));
-  // });
 
 }
 
@@ -476,10 +526,9 @@ async function drawGDPChart(countryName) {
 
     // ---------- Layout ----------
     const margin = { top: 30, right: 80, bottom: 40, left: 80 };
-    const width = 800 - margin.left - margin.right;
+    const width = 1200 - margin.left - margin.right;
     const height = 400 - margin.top - margin.bottom;
     const bandSize = 10;   // % per band
-    const numBands = 2;    // 0–10, 10–20
 
     const svg = gdpDiv.append("svg")
       .attr("width", width + margin.left + margin.right)
@@ -507,32 +556,7 @@ async function drawGDPChart(countryName) {
     const bandScale = d3.scaleLinear()
       .domain([0, bandSize])
       .range([0, height / 2]);
-
-    // ---------- Axes ----------
-    chart.append("g")
-      .attr("transform", `translate(0,${height})`)
-      .call(d3.axisBottom(x).tickFormat(d3.format("d")));
-
-    chart.append("g")
-      .call(d3.axisLeft(yGDP).ticks(6).tickFormat(d3.format(".2s")));
-
-    chart.append("g")
-      .attr("transform", `translate(${width},0)`)
-      .call(d3.axisRight(yGrowth).ticks(6));
-
-    // ---------- GDP line ----------
-    chart.append("path")
-      .datum(gdp)
-      .attr("fill", "none")
-      .attr("stroke", "#4c78a8")
-      .attr("stroke-width", 2.5)
-      .attr("d", d3.line()
-        .x(d => x(d.year))
-        .y(d => yGDP(d.value))
-        .curve(d3.curveMonotoneX)
-      );
-
-    // ---------- Horizon graph ----------
+     // ---------- Horizon graph ----------
     const zeroY = yGrowth(0);
 
     chart.append("line")
@@ -555,20 +579,63 @@ async function drawGDPChart(countryName) {
         })
         .curve(d3.curveMonotoneX);
 
-      chart.append("path")
+      const growthLinePath =chart.append("path")
         .datum(data)
         .attr("fill", color)
         .attr("opacity", 0.85)
         .attr("d", area);
+      const growthLength = growthLinePath.node().getTotalLength();
+
+      growthLinePath
+        .attr("stroke-dasharray", `${growthLength} ${growthLength}`)
+        .attr("stroke-dashoffset", growthLength)
+        .transition()
+        .delay(300)
+        .duration(1000)
+        .ease(d3.easeCubicOut)
+        .attr("stroke-dashoffset", 0);
     }
 
+
     // Positive bands
-    drawHorizonBand(growth, 0, "#58c1f2", true);
-    drawHorizonBand(growth, 1, "#1f78b4", true);
+    drawHorizonBand(growth, 0, "#b1e6ffff", true);
 
     // Negative bands
-    drawHorizonBand(growth, 0, "#e88a8a", false);
-    drawHorizonBand(growth, 1, "#ff0404", false);
+    drawHorizonBand(growth, 0, "#f37171ff", false);
+
+    // ---------- Axes ----------
+    chart.append("g")
+      .attr("transform", `translate(0,${height})`)
+      .call(d3.axisBottom(x).tickFormat(d3.format("d")));
+
+    chart.append("g")
+      .call(d3.axisLeft(yGDP).ticks(6).tickFormat(d3.format(".2s")));
+
+    chart.append("g")
+      .attr("transform", `translate(${width},0)`)
+      .call(d3.axisRight(yGrowth).ticks(6));
+
+    // ---------- GDP line ----------
+    const gdpLinePath =chart.append("path")
+      .datum(gdp)
+      .attr("fill", "none")
+      .attr("stroke", "#4c78a8")
+      .attr("stroke-width", 2.5)
+      .attr("d", d3.line()
+        .x(d => x(d.year))
+        .y(d => yGDP(d.value))
+        .curve(d3.curveMonotoneX)
+      );
+    const totalLength = gdpLinePath.node().getTotalLength();
+
+    gdpLinePath
+      .attr("stroke-dasharray", `${totalLength} ${totalLength}`)
+      .attr("stroke-dashoffset", totalLength)
+      .transition()
+      .duration(1200)
+      .ease(d3.easeCubicOut)
+      .attr("stroke-dashoffset", 0);
+
 
     // ---------- Labels ----------
     chart.append("text")
@@ -626,66 +693,60 @@ function exponentialRegression(data) {
 async function drawAgricultureChart(countryName){
   const agriDiv = d3.select("#agricultureChart");
   agriDiv.selectAll("*").remove();
-
   try {
     const cropProductionData = await d3.csv(
       "Dataset/Agriculture/Agriculture and Rural development_Crop production index (2014-2016 = 100).csv"
     );
-
     const foodProductionData = await d3.csv(
       "Dataset/Agriculture/Agriculture and Rural development_Food production index (2014-2016 = 100).csv"
     );
-
     const countryCropData = cropProductionData.find(
       d => d["Country Name"] === countryName
     );
-
     const countryFoodData = foodProductionData.find(
       d => d["Country Name"] === countryName
     );
-
     if (!countryCropData && !countryFoodData) {
       agriDiv.append("p").text("No agriculture data found for this country.");
       return;
     }
-
     // Crop production values
     const cropValues = Object.entries(countryCropData || {})
       .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
       .map(([year, val]) => ({ year: +year, value: +val }))
       .filter(d => !isNaN(d.value))
       .sort((a, b) => a.year - b.year);
-
     // Food production values
     const foodValues = Object.entries(countryFoodData || {})
       .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
       .map(([year, val]) => ({ year: +year, value: +val }))
       .filter(d => !isNaN(d.value))
-      .sort((a,b) => a.year - b.year);
-
-    // ---------- Layout ----------
-    const margin = { top: 30, right: 80, bottom: 40, left: 80 };
-    const width = 800 - margin.left - margin.right;
+      .sort((a, b) => a.year - b.year);
+    // Merge crop & food by year
+    const mergedData = cropValues.map(d => {
+      const food = foodValues.find(f => f.year === d.year);
+      return food
+        ? { year: d.year, crop: d.value, food: food.value }
+        : null;
+    }).filter(d => d !== null);
+    // init svg
+    const margin = {top: 20, right: 200, bottom: 40, left: 150};
+    const width = 1000 - margin.left - margin.right;
     const height = 400 - margin.top - margin.bottom;
-
     const svg = agriDiv.append("svg")
       .attr("width", width + margin.left + margin.right)
-      .attr("height", height + margin.top + margin.bottom);
-
-    const chart = svg.append("g")
+      .attr("height", height + margin.top + margin.bottom)
+      .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
-
     // X scale (Year)
     const x = d3.scaleLinear()
       .domain(d3.extent(cropValues, d => d.year))
       .range([0, width]);
-
     // Y scale – Crop production (left)
     const yCrop = d3.scaleLinear()
       .domain([0, d3.max(cropValues, d => d.value)])
       .nice()
       .range([height, 0]);
-
     // Y scale – Food production (right)
     const yFood = d3.scaleLinear()
       .domain([
@@ -694,30 +755,24 @@ async function drawAgricultureChart(countryName){
       ])
       .nice()
       .range([height, 0]);
-
-    // ---------- Axes ----------
-    chart.append("g")
+    // Axes
+    svg.append("g")
       .attr("transform", `translate(0,${height})`)
       .call(d3.axisBottom(x).tickFormat(d3.format("d")));
-
     svg.append("g")
       .call(d3.axisLeft(yCrop).ticks(6));
-
-    chart.append("g")
+    svg.append("g")
       .attr("transform", `translate(${width},0)`)
       .call(d3.axisRight(yFood).ticks(6));
-
     // Line generators
     const lineCrop = d3.line()
       .x(d => x(d.year))
       .y(d => yCrop(d.value))
       .curve(d3.curveMonotoneX);
-
     const lineFood = d3.line()
       .x(d => x(d.year))
       .y(d => yFood(d.value))
       .curve(d3.curveMonotoneX);
-
     // Draw lines
     svg.append("path")
       .datum(cropValues)
@@ -725,14 +780,12 @@ async function drawAgricultureChart(countryName){
       .attr("stroke", "#5A9CB5")
       .attr("stroke-width", 2.5)
       .attr("d", lineCrop);
-
     svg.append("path")
       .datum(foodValues)
       .attr("fill", "none")
       .attr("stroke", "#FA6868")
       .attr("stroke-width", 2.5)
       .attr("d", lineFood);
-
     // Draw dots
     svg.selectAll(".dotCrop")
       .data(cropValues)
@@ -742,7 +795,6 @@ async function drawAgricultureChart(countryName){
       .attr("cy", d => yCrop(d.value))
       .attr("r", 3)
       .attr("fill", "#5A9CB5");
-
     svg.selectAll(".dotFood")
       .data(foodValues)
       .enter().append("circle")
@@ -751,38 +803,32 @@ async function drawAgricultureChart(countryName){
       .attr("cy", d => yFood(d.value))
       .attr("r", 3)
       .attr("fill", "#FA6868");
-
     // Labels
     svg.append("text")
       .attr("x", width / 2)
       .attr("y", height + 35)
       .attr("text-anchor", "middle")
       .text("Year");
-
     svg.append("text")
       .attr("transform", "rotate(-90)")
       .attr("x", -height / 2)
       .attr("y", -50)
       .attr("text-anchor", "middle")
       .text("Crop Production Index (2014–2016 = 100)");
-
     svg.append("text")
       .attr("transform", "rotate(-90)")
       .attr("x", -height / 2)
       .attr("y", width + 60)
       .attr("text-anchor", "middle")
       .text("Food Production Index (2014–2016 = 100)");
-
     // Exponential regression
     const cropReg = exponentialRegression(cropValues);
     const foodReg = exponentialRegression(foodValues);
-
     // Years range
     const years = d3.range(
       d3.min(cropValues, d => d.year),
       d3.max(cropValues, d => d.year) + 1
     );
-
     // Regression curves
     const cropRegCurve = cropReg
       ? years.map(y => ({
@@ -790,24 +836,20 @@ async function drawAgricultureChart(countryName){
           value: cropReg.a * Math.exp(cropReg.b * y)
         }))
       : [];
-
     const foodRegCurve = foodReg
       ? years.map(y => ({
           year: y,
           value: foodReg.a * Math.exp(foodReg.b * y)
         }))
       : [];
-
     const lineCropReg = d3.line()
       .x(d => x(d.year))
       .y(d => yCrop(d.value))
       .curve(d3.curveMonotoneX);
-
     const lineFoodReg = d3.line()
       .x(d => x(d.year))
       .y(d => yFood(d.value))
       .curve(d3.curveMonotoneX);
-
     // Crop exponential regression
     svg.append("path")
       .datum(cropRegCurve)
@@ -817,7 +859,6 @@ async function drawAgricultureChart(countryName){
       .attr("stroke-width", 2)
       .attr("stroke-dasharray", "6,4")
       .attr("d", lineCropReg);
-
     // Food exponential regression
     svg.append("path")
       .datum(foodRegCurve)
@@ -827,7 +868,6 @@ async function drawAgricultureChart(countryName){
       .attr("stroke-width", 2)
       .attr("stroke-dasharray", "6,4")
       .attr("d", lineFoodReg);
-
     // ===== Legend =====
     const legendData = [
       { label: "Crop production", color: "#5A9CB5", dash: "0" },
@@ -835,18 +875,15 @@ async function drawAgricultureChart(countryName){
       { label: "Crop exponential trend", color: "#5A9CB5", dash: "6,4" },
       { label: "Food exponential trend", color: "#FA6868", dash: "6,4" }
     ];
-
     const legend = svg.append("g")
       .attr("class", "legend")
       .attr("transform", `translate(${60}, 10)`);
-
     const legendItem = legend.selectAll(".legend-item")
       .data(legendData)
       .enter()
       .append("g")
       .attr("class", "legend-item")
       .attr("transform", (d, i) => `translate(0, ${i * 20})`);
-
     // Line symbol
     legendItem.append("line")
       .attr("x1", -40)
@@ -856,14 +893,12 @@ async function drawAgricultureChart(countryName){
       .attr("stroke", d => d.color)
       .attr("stroke-width", 2)
       .attr("stroke-dasharray", d => d.dash);
-
     // Text
     legendItem.append("text")
       .attr("x", -5)
       .attr("y", 4)
       .style("font-size", "12px")
       .text(d => d.label);
-
     legend.insert("rect", ":first-child")
       .attr("x", -45)
       .attr("y", -12)
@@ -873,101 +908,36 @@ async function drawAgricultureChart(countryName){
       .attr("opacity", 0.4)
       .attr("rx", 4);
 
+    // ===== Agriculture KPIs (right side) =====
+    const latestCrop = cropValues[cropValues.length - 1];
+    const latestFood = foodValues[foodValues.length - 1];
 
+    const prevCrop = cropValues[cropValues.length - 2];
+    const prevFood = foodValues[foodValues.length - 2];
+
+    // 1. Food production index
+    document.getElementById("kpi-food-agri").textContent =
+      latestFood ? latestFood.value.toFixed(1) : "N/A";
+
+    // 2. Crop production index
+    document.getElementById("kpi-crop").textContent =
+      latestCrop ? latestCrop.value.toFixed(1) : "N/A";
+
+    // 3. Agriculture growth (% – food index YoY)
+    document.getElementById("kpi-agri-growth").textContent =
+      latestFood && prevFood
+        ? (((latestFood.value - prevFood.value) / prevFood.value) * 100).toFixed(2) + "%"
+        : "N/A";
+
+    // 4. Gap between food & crop indices
+    document.getElementById("kpi-agri-gap").textContent =
+      latestFood && latestCrop
+        ? (latestFood.value - latestCrop.value).toFixed(1)
+        : "N/A";
 
   } catch (err) {
     console.error("Error loading agriculture data:", err);
     agriDiv.append("p").text("Failed to load agriculture data.");
-  }
-}
-
-// ----------------------------
-// Co2 chart
-// ----------------------------
-
-async function drawCO2Chart(countryName) {
-  const co2Div = d3.select("#co2Chart");
-  co2Div.selectAll("*").remove();
-
-  try {
-    const data = await d3.csv("Dataset/Environment/Urban_developement_Carbon_intensity_of_GDP_(kg_CO2e_per_constant_2015_US$_of_GDP).csv");
-    const countryData = data.find(d => d["Country Name"] === countryName);
-    if (!countryData) {
-      co2Div.append("p").text("No CO₂ data found for this country.");
-      return;
-    }
-
-    const co2Values = Object.entries(countryData)
-      .filter(([key, val]) => /^\d{4}$/.test(key) && val !== "")
-      .map(([year, val]) => ({ year: +year, value: +val }))
-      .filter(d => !isNaN(d.value))
-      .sort((a, b) => a.year - b.year);
-
-    if (co2Values.length === 0) {
-      co2Div.append("p").text("No CO₂ data available.");
-      return;
-    }
-    const margin = {top: 20, right: 40, bottom: 20, left: 70};
-    const width = 700 - margin.left - margin.right;
-    const height = 400 - margin.top - margin.bottom;
-
-    const svg = co2Div.append("svg")
-      .attr("width", width + margin.left + margin.right)
-      .attr("height", height + margin.top + margin.bottom)
-      .append("g")
-      .attr("transform", `translate(${margin.left},${margin.top})`);
-
-    const x = d3.scaleLinear()
-      .domain(d3.extent(co2Values, d => d.year))
-      .range([0, width]);
-
-    const y = d3.scaleLinear()
-      .domain([0, d3.max(co2Values, d => d.value)])
-      .nice()
-      .range([height, 0]);
-
-    const line = d3.line()
-      .x(d => x(d.year))
-      .y(d => y(d.value))
-      .curve(d3.curveMonotoneX);
-
-    svg.append("path")
-      .datum(co2Values)
-      .attr("fill", "none")
-      .attr("stroke", "#ff6600")
-      .attr("stroke-width", 2.5)
-      .attr("d", line);
-
-    svg.selectAll(".dot")
-      .data(co2Values)
-      .enter().append("circle")
-      .attr("cx", d => x(d.year))
-      .attr("cy", d => y(d.value))
-      .attr("r", 3)
-      .attr("fill", "#ff6600");
-
-    svg.append("g")
-      .attr("transform", `translate(0,${height})`)
-      .call(d3.axisBottom(x).tickFormat(d3.format("d")));
-
-    svg.append("g")
-      .call(d3.axisLeft(y));
-
-    svg.append("text")
-      .attr("x", width / 2)
-      .attr("y", height + 35)
-      .attr("text-anchor", "middle")
-      .text("Year");
-
-    svg.append("text")
-      .attr("transform", "rotate(-90)")
-      .attr("x", -height / 2)
-      .attr("y", -55)
-      .attr("text-anchor", "middle")
-      .text("CO₂ (kg per US$ GDP)");
-  } catch (err) {
-    console.error("Error loading CO₂ data:", err);
-    co2Div.append("p").text("Failed to load CO₂ data.");
   }
 }
 
@@ -1268,4 +1238,17 @@ async function updateEmissionPieCharts(countryName, year) {
       );
   }
 }
+function animateNumber(el, start, end, duration = 800) {
+  d3.select(el)
+    .transition()
+    .duration(duration)
+    .tween("text", function () {
+      const i = d3.interpolateNumber(start, end);
+      return function (t) {
+        this.textContent = i(t).toFixed(1);
+      };
+    });
+}
+animateNumber("#kpi-food-agri", 0, latestFood.value);
+animateNumber("#kpi-crop", 0, latestCrop.value);
 

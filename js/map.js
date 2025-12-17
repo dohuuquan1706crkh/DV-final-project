@@ -242,7 +242,7 @@ async function loadWDIcsv(url) {
 }
 
 document.getElementById("updateBtn").addEventListener("click", () => {
-    const raw = parseInt(document.getElementById("yearInput").value);
+    const raw = parseInt(document.getElementById("yearInput-pyramid").value);
     const year = Number.isFinite(raw) ? raw : 2020;   // fallback
 
     drawScatterForYear(year);   

@@ -48,7 +48,7 @@ function drawMap(world) {
         .on('click', (event, d) => {
         // Redirect to another page for the country
         const countryName = d.properties.name;
-        window.location.href = `country.html?name=${encodeURIComponent(countryName)}`;
+        window.location.href = `country.html?name=${encodeURIComponent(countryNameMap[countryName])}`;
         });
 
     const graticule = d3.geoGraticule();
@@ -59,6 +59,28 @@ function drawMap(world) {
     .attr('stroke', '#cfcfcf')
     .attr('stroke-width', 0.5);
 }
+
+// -------------------------------------
+// DEBUG
+// -------------------------------------
+
+d3.json(GEOJSON_URL).then(world => {
+    countriesData = world.features;
+
+    // DEBUG: list all country names
+    const countryNames = world.features
+        .map(d => d.properties.name)
+        .filter(d => d); // remove undefined/null
+
+    console.log('Total countries:', countryNames.length);
+    console.log('Country names:', countryNames);
+
+    drawMap(world);
+});
+// -------------------------------------
+// DEBUG
+// -------------------------------------
+
 
 // Zoom & pan
 const zoom = d3.zoom()
@@ -730,4 +752,181 @@ function flagURL(alpha3) {
     const a2 = alpha3to2[alpha3];
     if (!a2) return null;     // region → không có cờ
     return `data/flags/${a2.toLowerCase()}.png`;
+};
+
+// ----------------------------------------
+// Country dictionary
+// ----------------------------------------
+
+const countryNameMap = {
+  "Afghanistan": "Afghanistan",
+  "Angola": "Angola",
+  "Albania": "Albania",
+  "United Arab Emirates": "United Arab Emirates",
+  "Argentina": "Argentina",
+  "Armenia": "Armenia",
+  "Australia": "Australia",
+  "Austria": "Austria",
+  "Azerbaijan": "Azerbaijan",
+  "Burundi": "Burundi",
+  "Belgium": "Belgium",
+  "Benin": "Benin",
+  "Burkina Faso": "Burkina Faso",
+  "Bangladesh": "Bangladesh",
+  "Bulgaria": "Bulgaria",
+  "The Bahamas": "Bahamas, The",
+  "Bosnia and Herzegovina": "Bosnia and Herzegovina",
+  "Belarus": "Belarus",
+  "Belize": "Belize",
+  "Bolivia": "Bolivia",
+  "Brazil": "Brazil",
+  "Brunei": "Brunei Darussalam",
+  "Bhutan": "Bhutan",
+  "Botswana": "Botswana",
+  "Central African Republic": "Central African Republic",
+  "Canada": "Canada",
+  "Switzerland": "Switzerland",
+  "Chile": "Chile",
+  "China": "China",
+  "Ivory Coast": "Cote d'Ivoire",
+  "Cameroon": "Cameroon",
+  "Democratic Republic of the Congo": "Congo, Dem. Rep.",
+  "Republic of the Congo": "Congo, Rep.",
+  "Colombia": "Colombia",
+  "Costa Rica": "Costa Rica",
+  "Cuba": "Cuba",
+  "Cyprus": "Cyprus",
+  "Czech Republic": "Czechia",
+  "Germany": "Germany",
+  "Djibouti": "Djibouti",
+  "Denmark": "Denmark",
+  "Dominican Republic": "Dominican Republic",
+  "Algeria": "Algeria",
+  "Ecuador": "Ecuador",
+  "Egypt": "Egypt, Arab Rep.",
+  "Eritrea": "Eritrea",
+  "Spain": "Spain",
+  "Estonia": "Estonia",
+  "Ethiopia": "Ethiopia",
+  "Finland": "Finland",
+  "Fiji": "Fiji",
+  "France": "France",
+  "Gabon": "Gabon",
+  "England": "United Kingdom",
+  "Georgia": "Georgia",
+  "Ghana": "Ghana",
+  "Guinea": "Guinea",
+  "Gambia": "Gambia, The",
+  "Guinea Bissau": "Guinea-Bissau",
+  "Equatorial Guinea": "Equatorial Guinea",
+  "Greece": "Greece",
+  "Greenland": "Greenland",
+  "Guatemala": "Guatemala",
+  "Guyana": "Guyana",
+  "Honduras": "Honduras",
+  "Croatia": "Croatia",
+  "Haiti": "Haiti",
+  "Hungary": "Hungary",
+  "Indonesia": "Indonesia",
+  "India": "India",
+  "Ireland": "Ireland",
+  "Iran": "Iran, Islamic Rep.",
+  "Iraq": "Iraq",
+  "Iceland": "Iceland",
+  "Israel": "Israel",
+  "Italy": "Italy",
+  "Jamaica": "Jamaica",
+  "Jordan": "Jordan",
+  "Japan": "Japan",
+  "Kazakhstan": "Kazakhstan",
+  "Kenya": "Kenya",
+  "Kyrgyzstan": "Kyrgyz Republic",
+  "Cambodia": "Cambodia",
+  "South Korea": "Korea, Rep.",
+  "Kosovo": "Kosovo",
+  "Kuwait": "Kuwait",
+  "Laos": "Lao PDR",
+  "Lebanon": "Lebanon",
+  "Liberia": "Liberia",
+  "Libya": "Libya",
+  "Sri Lanka": "Sri Lanka",
+  "Lesotho": "Lesotho",
+  "Lithuania": "Lithuania",
+  "Luxembourg": "Luxembourg",
+  "Latvia": "Latvia",
+  "Morocco": "Morocco",
+  "Moldova": "Moldova",
+  "Madagascar": "Madagascar",
+  "Mexico": "Mexico",
+  "Macedonia": "North Macedonia",
+  "Mali": "Mali",
+  "Myanmar": "Myanmar",
+  "Montenegro": "Montenegro",
+  "Mongolia": "Mongolia",
+  "Mozambique": "Mozambique",
+  "Mauritania": "Mauritania",
+  "Malawi": "Malawi",
+  "Malaysia": "Malaysia",
+  "Namibia": "Namibia",
+  "New Caledonia": "New Caledonia",
+  "Niger": "Niger",
+  "Nigeria": "Nigeria",
+  "Nicaragua": "Nicaragua",
+  "Netherlands": "Netherlands",
+  "Norway": "Norway",
+  "Nepal": "Nepal",
+  "New Zealand": "New Zealand",
+  "Oman": "Oman",
+  "Pakistan": "Pakistan",
+  "Panama": "Panama",
+  "Peru": "Peru",
+  "Philippines": "Philippines",
+  "Papua New Guinea": "Papua New Guinea",
+  "Poland": "Poland",
+  "Puerto Rico": "Puerto Rico (US)",
+  "North Korea": "Korea, Dem. People's Rep.",
+  "Portugal": "Portugal",
+  "Paraguay": "Paraguay",
+  "Qatar": "Qatar",
+  "Romania": "Romania",
+  "Russia": "Russian Federation",
+  "Rwanda": "Rwanda",
+  "Saudi Arabia": "Saudi Arabia",
+  "Sudan": "Sudan",
+  "South Sudan": "South Sudan",
+  "Senegal": "Senegal",
+  "Solomon Islands": "Solomon Islands",
+  "Sierra Leone": "Sierra Leone",
+  "El Salvador": "El Salvador",
+  "Somalia": "Somalia, Fed. Rep.",
+  "Republic of Serbia": "Serbia",
+  "Suriname": "Suriname",
+  "Slovakia": "Slovak Republic",
+  "Slovenia": "Slovenia",
+  "Sweden": "Sweden",
+  "Swaziland": "Eswatini",
+  "Syria": "Syrian Arab Republic",
+  "Chad": "Chad",
+  "Togo": "Togo",
+  "Thailand": "Thailand",
+  "Tajikistan": "Tajikistan",
+  "Turkmenistan": "Turkmenistan",
+  "East Timor": "Timor-Leste",
+  "Trinidad and Tobago": "Trinidad and Tobago",
+  "Tunisia": "Tunisia",
+  "Turkey": "Turkiye",
+  "Taiwan": "China", 
+  "United Republic of Tanzania": "Tanzania",
+  "Uganda": "Uganda",
+  "Ukraine": "Ukraine",
+  "Uruguay": "Uruguay",
+  "USA": "United States",
+  "Uzbekistan": "Uzbekistan",
+  "Venezuela": "Venezuela, RB",
+  "Vietnam": "Viet Nam",
+  "Vanuatu": "Vanuatu",
+  "Yemen": "Yemen, Rep.",
+  "South Africa": "South Africa",
+  "Zambia": "Zambia",
+  "Zimbabwe": "Zimbabwe"
 };

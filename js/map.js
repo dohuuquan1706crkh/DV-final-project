@@ -504,13 +504,6 @@ async function loadWDIcsv(url) {
     return d3.csvParse(cleanCSV);
 }
 
-document.getElementById("updateBtn").addEventListener("click", () => {
-    const raw = parseInt(document.getElementById("yearInput-pyramid").value);
-    const year = Number.isFinite(raw) ? raw : 2020;   // fallback
-
-    drawScatterForYear(year);   
-});
-
 // ----------------------------------------
 // Flags dict
 // ----------------------------------------

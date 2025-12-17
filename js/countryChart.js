@@ -8,6 +8,15 @@ let primaryCountry = null;
 let compareCountry = null;
 let currentMode = "gdp";
 let lastComparedCountry = null;
+let economyChart = {
+  svg: null,
+  x: null,
+  y: null,
+  line: null,
+  pathA: null,
+  pathB: null,
+  yAxisG: null
+};
 
 const ctx = {};
 let pieCharts = []; // store references to each pie
@@ -50,8 +59,7 @@ document.getElementById("compareBtn").addEventListener("click", () => {
   compareEconomy(countryName, secondCountry, currentMode);
 
   drawEmissionRadar(countryName, lastComparedCountry, "co2");
-  drawEmissionRadar(countryName, lastComparedCountry, "n2o");
-  drawEmissionRadar(countryName, lastComparedCountry, "ch4");
+
 });
 
 document.getElementById("toggleEconomyBtn").addEventListener("click", function () {
@@ -66,9 +74,7 @@ document.getElementById("toggleEconomyBtn").addEventListener("click", function (
       
   compareEconomy(countryName, lastComparedCountry, currentMode);
 
-  // drawEmissionRadar(countryName, lastComparedCountry, "co2");
-  // drawEmissionRadar(countryName, lastComparedCountry, "n2o");
-  // drawEmissionRadar(countryName, lastComparedCountry, "ch4");
+
 });
 
 async function loadKPIs(countryName) {
@@ -565,10 +571,9 @@ async function drawGDPChart(countryName) {
       .sort((a, b) => a.year - b.year);
 
     // ---------- Layout ----------
-    const margin = { top: 30, right: 80, bottom: 40, left: 80 };
+    const margin = { top: 40, right: 280, bottom: 40, left: 80 };
     const width = 1200 - margin.left - margin.right;
     const height = 400 - margin.top - margin.bottom;
-    const bandSize = 10;   // % per band
 
     const svg = gdpDiv.append("svg")
       .attr("width", width + margin.left + margin.right)
@@ -588,11 +593,14 @@ async function drawGDPChart(countryName) {
       .range([height, 0]);
 
     const yGrowth = d3.scaleLinear()
-      .domain([Math.min(0,d3.min(growth, d => d.value)), Math.max(0,d3.max(growth, d => d.value))])
+      .domain([
+        Math.min(0, d3.min(growth, d => d.value)),
+        Math.max(0, d3.max(growth, d => d.value))
+      ])
       .nice()
       .range([height, 0]);
 
-     // ---------- Horizon graph ----------
+    // ---------- Horizon baseline ----------
     const zeroY = yGrowth(0);
 
     chart.append("line")
@@ -602,38 +610,27 @@ async function drawGDPChart(countryName) {
       .attr("y2", zeroY)
       .attr("stroke", "#adb5bd");
 
-    function drawHorizonBand(data, bandIndex, color, positive) {
+    function drawHorizonBand(data, color, positive) {
       const area = d3.area()
         .x(d => x(d.year))
         .y0(zeroY)
-        .y1(d => {
-          if (positive)
-           return yGrowth(Math.max(0,d.value));
-          else return yGrowth(Math.min(0,d.value));
-        })
+        .y1(d =>
+          positive
+            ? yGrowth(Math.max(0, d.value))
+            : yGrowth(Math.min(0, d.value))
+        )
         .curve(d3.curveMonotoneX);
 
-      const growthLinePath =chart.append("path")
+      chart.append("path")
         .datum(data)
         .attr("fill", color)
         .attr("opacity", 0.85)
         .attr("d", area);
-      const growthLength = growthLinePath.node().getTotalLength();
-
-      growthLinePath
-        .attr("stroke-dasharray", `${growthLength} ${growthLength}`)
-        .attr("stroke-dashoffset", growthLength)
-        .transition()
-        .delay(300)
-        .duration(1000)
-        .ease(d3.easeCubicOut)
-        .attr("stroke-dashoffset", 0);
     }
-    // Positive bands
-    drawHorizonBand(growth, 0, "#b1e6ffff", true);
 
-    // Negative bands
-    drawHorizonBand(growth, 0, "#f37171ff", false);
+    // Horizon bands
+    drawHorizonBand(growth, "#b1e6ffff", true);
+    drawHorizonBand(growth, "#f37171ff", false);
 
     // ---------- Axes ----------
     chart.append("g")
@@ -648,7 +645,7 @@ async function drawGDPChart(countryName) {
       .call(d3.axisRight(yGrowth).ticks(6));
 
     // ---------- GDP line ----------
-    const gdpLinePath =chart.append("path")
+    const gdpLinePath = chart.append("path")
       .datum(gdp)
       .attr("fill", "none")
       .attr("stroke", "#4c78a8")
@@ -658,6 +655,7 @@ async function drawGDPChart(countryName) {
         .y(d => yGDP(d.value))
         .curve(d3.curveMonotoneX)
       );
+
     const totalLength = gdpLinePath.node().getTotalLength();
 
     gdpLinePath
@@ -668,8 +666,7 @@ async function drawGDPChart(countryName) {
       .ease(d3.easeCubicOut)
       .attr("stroke-dashoffset", 0);
 
-
-    // ---------- Labels ----------
+    // ---------- Axis labels ----------
     chart.append("text")
       .attr("x", width / 2)
       .attr("y", height + 35)
@@ -689,6 +686,51 @@ async function drawGDPChart(countryName) {
       .attr("y", width + 65)
       .attr("text-anchor", "middle")
       .text("GDP Growth (Horizon)");
+
+    // ---------- Legend (right, outside plot) ----------
+    const legend = svg.append("g")
+      .attr("class", "legend")
+      .attr(
+        "transform",
+        `translate(${margin.left + width + 110}, ${margin.top + 100})`
+      );
+
+    const legendData = [
+      { label: "GDP (current US$)", color: "#4c78a8", type: "line" },
+      { label: "GDP Growth (Positive)", color: "#b1e6ffff", type: "rect" },
+      { label: "GDP Growth (Negative)", color: "#f37171ff", type: "rect" }
+    ];
+
+    const legendItem = legend.selectAll(".legend-item")
+      .data(legendData)
+      .enter()
+      .append("g")
+      .attr("class", "legend-item")
+      .attr("transform", (d, i) => `translate(0, ${i * 24})`);
+
+    legendItem.filter(d => d.type === "line")
+      .append("line")
+      .attr("x1", 0)
+      .attr("x2", 25)
+      .attr("y1", 8)
+      .attr("y2", 8)
+      .attr("stroke", d => d.color)
+      .attr("stroke-width", 3);
+
+    legendItem.filter(d => d.type === "rect")
+      .append("rect")
+      .attr("x", 0)
+      .attr("y", 2)
+      .attr("width", 25)
+      .attr("height", 12)
+      .attr("fill", d => d.color)
+      .attr("opacity", 0.85);
+
+    legendItem.append("text")
+      .attr("x", 35)
+      .attr("y", 12)
+      .style("font-size", "12px")
+      .text(d => d.label);
 
   } catch (err) {
     console.error(err);
@@ -1451,96 +1493,9 @@ async function drawEmissionRadar(countryA, countryB, gas) {
 
   updateRadar(yearList[0]);
 }
-async function compareGDP(countryA, countryB) {
-  const container = d3.select("#compareGdpChart");
-  container.selectAll("*").remove();
-
-  const data = await d3.csv("Dataset/Economy/Economy_GDP(current US$).csv");
-
-  const rowA = data.find(d => d["Country Name"] === countryA);
-  const rowB = data.find(d => d["Country Name"] === countryB);
-
-  if (!rowA || !rowB) {
-    container.append("p").text("GDP data missing for one country");
-    return;
-  }
-
-  const extract = row =>
-    Object.entries(row)
-      .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
-      .map(([k, v]) => ({ year: +k, value: +v }));
-
-  const dataA = extract(rowA);
-  const dataB = extract(rowB);
-
-  const margin = { top: 20, right: 40, bottom: 40, left: 70 };
-  const width = 700 - margin.left - margin.right;
-  const height = 400 - margin.top - margin.bottom;
-
-  const svg = container.append("svg")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
-    .append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
-
-  const x = d3.scaleLinear()
-    .domain(d3.extent([...dataA, ...dataB], d => d.year))
-    .range([0, width]);
-
-  const y = d3.scaleLinear()
-    .domain([0, d3.max([...dataA, ...dataB], d => d.value)])
-    .nice()
-    .range([height, 0]);
-
-  const line = d3.line()
-    .x(d => x(d.year))
-    .y(d => y(d.value));
-
-  svg.append("path")
-    .datum(dataA)
-    .attr("fill", "none")
-    .attr("stroke", "#4e79a7")
-    .attr("stroke-width", 2.5)
-    .attr("d", line);
-
-  svg.append("path")
-    .datum(dataB)
-    .attr("fill", "none")
-    .attr("stroke", "#e15759")
-    .attr("stroke-width", 2.5)
-    .attr("d", line);
-
-  svg.append("g")
-    .attr("transform", `translate(0,${height})`)
-    .call(d3.axisBottom(x).tickFormat(d3.format("d")));
-
-  svg.append("g")
-    .call(d3.axisLeft(y).ticks(6).tickFormat(d3.format(".2s")));
-
-  // Legend
-  const legend = svg.append("g")
-    .attr("transform", `translate(${width - 120},10)`);
-
-  [[countryA, "#4e79a7"], [countryB, "#e15759"]].forEach((d, i) => {
-    legend.append("rect")
-      .attr("x", 0)
-      .attr("y", i * 20)
-      .attr("width", 12)
-      .attr("height", 12)
-      .attr("fill", d[1]);
-
-    legend.append("text")
-      .attr("x", 18)
-      .attr("y", i * 20 + 10)
-      .text(d[0]);
-  });
-}
-
 async function compareEconomy(countryA, countryB, mode = "gdp") {
   const container = d3.select("#compareGdpChart");
-  container.selectAll("*").remove();
 
-  // Decide dataset & labels
   const config = {
     gdp: {
       file: "Dataset/Economy/Economy_GDP(current US$).csv",
@@ -1555,22 +1510,16 @@ async function compareEconomy(countryA, countryB, mode = "gdp") {
   };
 
   const { file, yLabel, tickFormat } = config[mode];
-
   const data = await d3.csv(file);
 
   const rowA = data.find(d => d["Country Name"] === countryA);
   const rowB = data.find(d => d["Country Name"] === countryB);
-
-  if (!rowA || !rowB) {
-    container.append("p").text("Data missing for one country");
-    return;
-  }
+  if (!rowA || !rowB) return;
 
   const extract = row =>
     Object.entries(row)
       .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
       .map(([k, v]) => ({ year: +k, value: +v }))
-      .filter(d => !isNaN(d.value))
       .sort((a, b) => a.year - b.year);
 
   const dataA = extract(rowA);
@@ -1580,82 +1529,71 @@ async function compareEconomy(countryA, countryB, mode = "gdp") {
   const width = 700 - margin.left - margin.right;
   const height = 400 - margin.top - margin.bottom;
 
-  const svg = container.append("svg")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
-    .append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
+  /* ---------- INITIAL CREATE ---------- */
+  if (!economyChart.svg) {
+    container.selectAll("*").remove();
 
-  const x = d3.scaleLinear()
-    .domain(d3.extent([...dataA, ...dataB], d => d.year))
-    .range([0, width]);
+    const svg = container.append("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
 
-  const y = d3.scaleLinear()
-    .domain([
-      d3.min([...dataA, ...dataB], d => d.value),
-      d3.max([...dataA, ...dataB], d => d.value)
-    ])
-    .nice()
-    .range([height, 0]);
+    const x = d3.scaleLinear()
+      .domain(d3.extent([...dataA, ...dataB], d => d.year))
+      .range([0, width]);
 
-  const line = d3.line()
-    .x(d => x(d.year))
-    .y(d => y(d.value))
-    .curve(d3.curveMonotoneX);
+    const y = d3.scaleLinear()
+      .range([height, 0]);
 
-  svg.append("path")
-    .datum(dataA)
-    .attr("fill", "none")
-    .attr("stroke", "#4e79a7")
-    .attr("stroke-width", 2.5)
-    .attr("d", line);
+    const line = d3.line()
+      .x(d => x(d.year))
+      .y(d => y(d.value))
+      .curve(d3.curveMonotoneX);
 
-  svg.append("path")
-    .datum(dataB)
-    .attr("fill", "none")
-    .attr("stroke", "#e15759")
-    .attr("stroke-width", 2.5)
-    .attr("d", line);
+    svg.append("g")
+      .attr("transform", `translate(0,${height})`)
+      .call(d3.axisBottom(x).tickFormat(d3.format("d")));
 
-  svg.append("g")
-    .attr("transform", `translate(0,${height})`)
-    .call(d3.axisBottom(x).tickFormat(d3.format("d")));
+    const yAxisG = svg.append("g");
 
-  svg.append("g")
+    const pathA = svg.append("path")
+      .attr("fill", "none")
+      .attr("stroke", "#4e79a7")
+      .attr("stroke-width", 2.5);
+
+    const pathB = svg.append("path")
+      .attr("fill", "none")
+      .attr("stroke", "#e15759")
+      .attr("stroke-width", 2.5);
+
+    economyChart = { svg, x, y, line, pathA, pathB, yAxisG };
+  }
+
+  /* ---------- UPDATE WITH TRANSITION ---------- */
+  const { y, line, pathA, pathB, yAxisG } = economyChart;
+
+  y.domain([
+    d3.min([...dataA, ...dataB], d => d.value),
+    d3.max([...dataA, ...dataB], d => d.value)
+  ]).nice();
+
+  const t = d3.transition()
+    .duration(900)
+    .ease(d3.easeCubicInOut);
+
+  yAxisG.transition(t)
     .call(d3.axisLeft(y).ticks(6).tickFormat(tickFormat));
 
-  // Axis labels
-  svg.append("text")
-    .attr("x", width / 2)
-    .attr("y", height + 35)
-    .attr("text-anchor", "middle")
-    .text("Year");
+  pathA.datum(dataA)
+    .transition(t)
+    .attr("d", line);
 
-  svg.append("text")
-    .attr("transform", "rotate(-90)")
-    .attr("x", -height / 2)
-    .attr("y", -55)
-    .attr("text-anchor", "middle")
-    .text(yLabel);
-
-  // Legend
-  const legend = svg.append("g")
-    .attr("transform", `translate(${width - 140},10)`);
-
-  [[countryA, "#4e79a7"], [countryB, "#e15759"]].forEach((d, i) => {
-    legend.append("rect")
-      .attr("x", 0)
-      .attr("y", i * 20)
-      .attr("width", 12)
-      .attr("height", 12)
-      .attr("fill", d[1]);
-
-    legend.append("text")
-      .attr("x", 18)
-      .attr("y", i * 20 + 10)
-      .text(d[0]);
-  });
+  pathB.datum(dataB)
+    .transition(t)
+    .attr("d", line);
 }
+
 const emissionConfig = {
   co2: [
     {

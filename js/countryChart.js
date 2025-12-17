@@ -3,6 +3,11 @@ const AGE_GROUPS = [
   "35-39","40-44","45-49","50-54","55-59","60-64","65-69",
   "70-74","75-79","80+"
 ];
+let allCountries = [];
+let primaryCountry = null;
+let compareCountry = null;
+let currentMode = "gdp";
+let lastComparedCountry = null;
 
 const ctx = {};
 let pieCharts = []; // store references to each pie
@@ -33,8 +38,38 @@ async function showCharts(countryName) {
     updateEmissionPieCharts(countryName, slider.value);
   });
 
-
+  loadCountryList();
 }
+document.getElementById("compareBtn").addEventListener("click", () => {
+  const secondCountry = document.getElementById("compareSearch").value.trim();
+  let currentMode = "gdp";
+  if (!secondCountry) return alert("Please select a country");
+
+  lastComparedCountry = secondCountry;
+
+  compareEconomy(countryName, secondCountry, currentMode);
+
+  drawEmissionRadar(countryName, lastComparedCountry, "co2");
+  drawEmissionRadar(countryName, lastComparedCountry, "n2o");
+  drawEmissionRadar(countryName, lastComparedCountry, "ch4");
+});
+
+document.getElementById("toggleEconomyBtn").addEventListener("click", function () {
+  if (!lastComparedCountry) return;
+
+  currentMode = currentMode === "gdp" ? "growth" : "gdp";
+
+  this.textContent =
+    currentMode === "gdp"
+      ? "Switch to GDP Growth"
+      : "Switch to GDP";
+      
+  compareEconomy(countryName, lastComparedCountry, currentMode);
+
+  // drawEmissionRadar(countryName, lastComparedCountry, "co2");
+  // drawEmissionRadar(countryName, lastComparedCountry, "n2o");
+  // drawEmissionRadar(countryName, lastComparedCountry, "ch4");
+});
 
 async function loadKPIs(countryName) {
   const YEAR = "2024";
@@ -1248,4 +1283,595 @@ function animateNumber(el, start, end, duration = 800) {
 }
 // animateNumber("#kpi-food-agri", 0, latestFood.value);
 // animateNumber("#kpi-crop", 0, latestCrop.value);
+
+async function drawEmissionRadar(countryA, countryB, gas) {
+
+  const chartDiv = d3.select(`#radarChart-${gas}`);
+  chartDiv.selectAll("*").remove();
+
+  const emissionFiles = emissionConfig[gas];
+  const datasets = await Promise.all(emissionFiles.map(d => d3.csv(d.file)));
+
+  const countries = [countryA, countryB];
+  const years = new Set();
+  const data = {};
+  countries.forEach(c => data[c] = {});
+
+  datasets.forEach((dataset, i) => {
+    countries.forEach(country => {
+      const row = dataset.find(d => d["Country Name"] === country);
+      if (!row) return;
+
+      Object.entries(row)
+        .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
+        .forEach(([year, value]) => {
+          year = +year;
+          years.add(year);
+          if (!data[country][year]) data[country][year] = {};
+          data[country][year][emissionFiles[i].axis] = +value;
+        });
+    });
+  });
+
+  const yearList = Array.from(years).sort((a, b) => a - b);
+
+  /***************************************
+   * SHARED SLIDER
+   ***************************************/
+  const slider = d3.select("#yearSlidercompare")
+    .attr("min", d3.min(yearList))
+    .attr("max", d3.max(yearList))
+    .attr("step", 1)
+    .property("value", yearList[0]);
+
+  const yearLabel = d3.select("#yearLabelcompare")
+    .text(yearList[0]);
+
+  /***************************************
+   * RADAR SETUP
+   ***************************************/
+  const width = 380;
+  const height = 380;
+  const radius = Math.min(width, height) / 2 - 60;
+
+  const svg = chartDiv.append("svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("g")
+    .attr("transform", `translate(${width / 2},${height / 2})`);
+
+  const axes = emissionFiles.map(d => d.axis);
+  const angleSlice = (2 * Math.PI) / axes.length;
+
+  const rScale = d3.scaleLinear()
+    .domain([0, 1])
+    .range([0, radius]);
+
+  d3.range(1, 6).forEach(i => {
+    svg.append("circle")
+      .attr("r", radius * i / 5)
+      .attr("fill", "none")
+      .attr("stroke", "#ccc");
+  });
+
+  axes.forEach((axis, i) => {
+    const angle = i * angleSlice - Math.PI / 2;
+
+    svg.append("line")
+      .attr("x2", radius * Math.cos(angle))
+      .attr("y2", radius * Math.sin(angle))
+      .attr("stroke", "#999");
+
+    svg.append("text")
+      .attr("x", (radius + 18) * Math.cos(angle))
+      .attr("y", (radius + 18) * Math.sin(angle))
+      .attr("text-anchor", "middle")
+      .style("font-size", "11px")
+      .text(axis);
+  });
+
+  const radarLine = d3.lineRadial()
+    .radius(d => rScale(d.value))
+    .angle((d, i) => i * angleSlice - Math.PI / 2)
+    .curve(d3.curveLinearClosed);
+
+  const colors = {
+    [countryA]: "#1f77b4",
+    [countryB]: "#d62728"
+  };
+  /***************************************
+ * LEGEND
+ ***************************************/
+  const legend = svg.append("g")
+    .attr("class", "radar-legend")
+    .attr("transform", `translate(${-width / 2 + 10},${-height / 2 + 10})`);
+
+  const legendItem = legend.selectAll(".legend-item")
+    .data(countries)
+    .enter()
+    .append("g")
+    .attr("class", "legend-item")
+    .attr("transform", (d, i) => `translate(0, ${i * 18})`);
+
+  legendItem.append("rect")
+    .attr("width", 12)
+    .attr("height", 12)
+    .attr("rx", 2)
+    .attr("fill", d => colors[d]);
+
+  legendItem.append("text")
+    .attr("x", 18)
+    .attr("y", 10)
+    .style("font-size", "12px")
+    .style("alignment-baseline", "middle")
+    .text(d => d);
+
+  function updateRadar(year) {
+
+  // 1️⃣ Compute a shared max across BOTH countries
+  const maxThisYear = d3.max(
+    countries.flatMap(country =>
+      axes.map(axis => data[country][year]?.[axis] ?? 0)
+    )
+  ) || 1;
+
+  // 2️⃣ Build radar data using the shared max
+  const radarData = countries.map(country => ({
+    country,
+    values: axes.map(axis => ({
+      axis,
+      value: (data[country][year]?.[axis] ?? 0) / maxThisYear
+    }))
+  }));
+
+  const paths = svg.selectAll(".radar-area")
+    .data(radarData, d => d.country);
+
+  paths.enter()
+    .append("path")
+    .attr("class", "radar-area")
+    .attr("fill-opacity", 0.35)
+    .attr("stroke-width", 2)
+    .merge(paths)
+    .transition()
+    .duration(400)
+    .attr("d", d => radarLine(d.values))
+    .attr("fill", d => colors[d.country])
+    .attr("stroke", d => colors[d.country]);
+
+  paths.exit().remove();
+}
+
+
+  slider.on("input", function () {
+    const year = +this.value;
+    yearLabel.text(year);
+    updateRadar(year);
+  });
+
+  updateRadar(yearList[0]);
+}
+async function compareGDP(countryA, countryB) {
+  const container = d3.select("#compareGdpChart");
+  container.selectAll("*").remove();
+
+  const data = await d3.csv("Dataset/Economy/Economy_GDP(current US$).csv");
+
+  const rowA = data.find(d => d["Country Name"] === countryA);
+  const rowB = data.find(d => d["Country Name"] === countryB);
+
+  if (!rowA || !rowB) {
+    container.append("p").text("GDP data missing for one country");
+    return;
+  }
+
+  const extract = row =>
+    Object.entries(row)
+      .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
+      .map(([k, v]) => ({ year: +k, value: +v }));
+
+  const dataA = extract(rowA);
+  const dataB = extract(rowB);
+
+  const margin = { top: 20, right: 40, bottom: 40, left: 70 };
+  const width = 700 - margin.left - margin.right;
+  const height = 400 - margin.top - margin.bottom;
+
+  const svg = container.append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain(d3.extent([...dataA, ...dataB], d => d.year))
+    .range([0, width]);
+
+  const y = d3.scaleLinear()
+    .domain([0, d3.max([...dataA, ...dataB], d => d.value)])
+    .nice()
+    .range([height, 0]);
+
+  const line = d3.line()
+    .x(d => x(d.year))
+    .y(d => y(d.value));
+
+  svg.append("path")
+    .datum(dataA)
+    .attr("fill", "none")
+    .attr("stroke", "#4e79a7")
+    .attr("stroke-width", 2.5)
+    .attr("d", line);
+
+  svg.append("path")
+    .datum(dataB)
+    .attr("fill", "none")
+    .attr("stroke", "#e15759")
+    .attr("stroke-width", 2.5)
+    .attr("d", line);
+
+  svg.append("g")
+    .attr("transform", `translate(0,${height})`)
+    .call(d3.axisBottom(x).tickFormat(d3.format("d")));
+
+  svg.append("g")
+    .call(d3.axisLeft(y).ticks(6).tickFormat(d3.format(".2s")));
+
+  // Legend
+  const legend = svg.append("g")
+    .attr("transform", `translate(${width - 120},10)`);
+
+  [[countryA, "#4e79a7"], [countryB, "#e15759"]].forEach((d, i) => {
+    legend.append("rect")
+      .attr("x", 0)
+      .attr("y", i * 20)
+      .attr("width", 12)
+      .attr("height", 12)
+      .attr("fill", d[1]);
+
+    legend.append("text")
+      .attr("x", 18)
+      .attr("y", i * 20 + 10)
+      .text(d[0]);
+  });
+}
+
+async function compareEconomy(countryA, countryB, mode = "gdp") {
+  const container = d3.select("#compareGdpChart");
+  container.selectAll("*").remove();
+
+  // Decide dataset & labels
+  const config = {
+    gdp: {
+      file: "Dataset/Economy/Economy_GDP(current US$).csv",
+      yLabel: "GDP (current US$)",
+      tickFormat: d3.format(".2s")
+    },
+    growth: {
+      file: "Dataset/Economy/Economy_GDP growth (annual _).csv",
+      yLabel: "GDP Growth (annual %)",
+      tickFormat: d => d + "%"
+    }
+  };
+
+  const { file, yLabel, tickFormat } = config[mode];
+
+  const data = await d3.csv(file);
+
+  const rowA = data.find(d => d["Country Name"] === countryA);
+  const rowB = data.find(d => d["Country Name"] === countryB);
+
+  if (!rowA || !rowB) {
+    container.append("p").text("Data missing for one country");
+    return;
+  }
+
+  const extract = row =>
+    Object.entries(row)
+      .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
+      .map(([k, v]) => ({ year: +k, value: +v }))
+      .filter(d => !isNaN(d.value))
+      .sort((a, b) => a.year - b.year);
+
+  const dataA = extract(rowA);
+  const dataB = extract(rowB);
+
+  const margin = { top: 20, right: 40, bottom: 40, left: 70 };
+  const width = 700 - margin.left - margin.right;
+  const height = 400 - margin.top - margin.bottom;
+
+  const svg = container.append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain(d3.extent([...dataA, ...dataB], d => d.year))
+    .range([0, width]);
+
+  const y = d3.scaleLinear()
+    .domain([
+      d3.min([...dataA, ...dataB], d => d.value),
+      d3.max([...dataA, ...dataB], d => d.value)
+    ])
+    .nice()
+    .range([height, 0]);
+
+  const line = d3.line()
+    .x(d => x(d.year))
+    .y(d => y(d.value))
+    .curve(d3.curveMonotoneX);
+
+  svg.append("path")
+    .datum(dataA)
+    .attr("fill", "none")
+    .attr("stroke", "#4e79a7")
+    .attr("stroke-width", 2.5)
+    .attr("d", line);
+
+  svg.append("path")
+    .datum(dataB)
+    .attr("fill", "none")
+    .attr("stroke", "#e15759")
+    .attr("stroke-width", 2.5)
+    .attr("d", line);
+
+  svg.append("g")
+    .attr("transform", `translate(0,${height})`)
+    .call(d3.axisBottom(x).tickFormat(d3.format("d")));
+
+  svg.append("g")
+    .call(d3.axisLeft(y).ticks(6).tickFormat(tickFormat));
+
+  // Axis labels
+  svg.append("text")
+    .attr("x", width / 2)
+    .attr("y", height + 35)
+    .attr("text-anchor", "middle")
+    .text("Year");
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -height / 2)
+    .attr("y", -55)
+    .attr("text-anchor", "middle")
+    .text(yLabel);
+
+  // Legend
+  const legend = svg.append("g")
+    .attr("transform", `translate(${width - 140},10)`);
+
+  [[countryA, "#4e79a7"], [countryB, "#e15759"]].forEach((d, i) => {
+    legend.append("rect")
+      .attr("x", 0)
+      .attr("y", i * 20)
+      .attr("width", 12)
+      .attr("height", 12)
+      .attr("fill", d[1]);
+
+    legend.append("text")
+      .attr("x", 18)
+      .attr("y", i * 20 + 10)
+      .text(d[0]);
+  });
+}
+const emissionConfig = {
+  co2: [
+    {
+      axis: "Industrial Combustion",
+      file: "Dataset/Environment/Urban developement (CO2) emissions from Industrial Combustion (Energy) (Mt CO2e).csv"
+    },
+    {
+      axis: "Transport",
+      file: "Dataset/Environment/Urban developement (CO2) emissions from Transport (Energy) (Mt CO2e).csv"
+    },
+    {
+      axis: "Power Industry",
+      file: "Dataset/Environment/Urban developement (CO2) emissions from Power Industry (Energy) (Mt CO2e).csv"
+    },
+    {
+      axis: "Building",
+      file: "Dataset/Environment/Urban developement (CO2) emissions from Building (Energy) (Mt CO2e).csv"
+    }
+  ],
+
+  n2o: [
+    {
+      axis: "Agriculture",
+      file: "Dataset/Environment/N2O emissions from Agriculture (Mt CO2e).csv"
+    },
+    {
+      axis: "Industry",
+      file: "Dataset/Environment/N2O emissions from Industry (Mt CO2e).csv"
+    }
+  ],
+
+  ch4: [
+    {
+      axis: "Agriculture",
+      file: "Dataset/Environment/CH4 emissions from Agriculture (Mt CO2e).csv"
+    },
+    {
+      axis: "Waste",
+      file: "Dataset/Environment/CH4 emissions from Waste (Mt CO2e).csv"
+    },
+    {
+      axis: "Energy",
+      file: "Dataset/Environment/CH4 emissions from Energy (Mt CO2e).csv"
+    }
+  ]
+};
+
+
+/***************************************
+ * DRAW RADAR (PARAMETERIZED BY GAS)
+ ***************************************/
+async function drawEmissionRadar(countryA, countryB, gas) {
+
+  const chartDiv = d3.select(`#radarChart-${gas}`);
+  chartDiv.selectAll("*").remove();
+
+  const emissionFiles = emissionConfig[gas];
+  const datasets = await Promise.all(emissionFiles.map(d => d3.csv(d.file)));
+
+  const countries = [countryA, countryB];
+  const years = new Set();
+  const data = {};
+  countries.forEach(c => data[c] = {});
+
+  datasets.forEach((dataset, i) => {
+    countries.forEach(country => {
+      const row = dataset.find(d => d["Country Name"] === country);
+      if (!row) return;
+
+      Object.entries(row)
+        .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
+        .forEach(([year, value]) => {
+          year = +year;
+          years.add(year);
+          if (!data[country][year]) data[country][year] = {};
+          data[country][year][emissionFiles[i].axis] = +value;
+        });
+    });
+  });
+
+  const yearList = Array.from(years).sort((a, b) => a - b);
+
+  /***************************************
+   * SHARED SLIDER
+   ***************************************/
+  const slider = d3.select("#yearSlidercompare")
+    .attr("min", d3.min(yearList))
+    .attr("max", d3.max(yearList))
+    .attr("step", 1)
+    .property("value", yearList[0]);
+
+  const yearLabel = d3.select("#yearLabelcompare")
+    .text(yearList[0]);
+
+  /***************************************
+   * RADAR SETUP
+   ***************************************/
+  const width = 380;
+  const height = 380;
+  const radius = Math.min(width, height) / 2 - 60;
+
+  const svg = chartDiv.append("svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("g")
+    .attr("transform", `translate(${width / 2},${height / 2})`);
+
+  const axes = emissionFiles.map(d => d.axis);
+  const angleSlice = (2 * Math.PI) / axes.length;
+
+  const rScale = d3.scaleLinear()
+    .domain([0, 1])
+    .range([0, radius]);
+
+  d3.range(1, 6).forEach(i => {
+    svg.append("circle")
+      .attr("r", radius * i / 5)
+      .attr("fill", "none")
+      .attr("stroke", "#ccc");
+  });
+
+  axes.forEach((axis, i) => {
+    const angle = i * angleSlice - Math.PI / 2;
+
+    svg.append("line")
+      .attr("x2", radius * Math.cos(angle))
+      .attr("y2", radius * Math.sin(angle))
+      .attr("stroke", "#999");
+
+    svg.append("text")
+      .attr("x", (radius + 18) * Math.cos(angle))
+      .attr("y", (radius + 18) * Math.sin(angle))
+      .attr("text-anchor", "middle")
+      .style("font-size", "11px")
+      .text(axis);
+  });
+
+  const radarLine = d3.lineRadial()
+    .radius(d => rScale(d.value))
+    .angle((d, i) => i * angleSlice - Math.PI / 2)
+    .curve(d3.curveLinearClosed);
+
+  const colors = {
+    [countryA]: "#1f77b4",
+    [countryB]: "#d62728"
+  };
+  /***************************************
+ * LEGEND
+ ***************************************/
+  const legend = svg.append("g")
+    .attr("class", "radar-legend")
+    .attr("transform", `translate(${-width / 2 + 10},${-height / 2 + 10})`);
+
+  const legendItem = legend.selectAll(".legend-item")
+    .data(countries)
+    .enter()
+    .append("g")
+    .attr("class", "legend-item")
+    .attr("transform", (d, i) => `translate(0, ${i * 18})`);
+
+  legendItem.append("rect")
+    .attr("width", 12)
+    .attr("height", 12)
+    .attr("rx", 2)
+    .attr("fill", d => colors[d]);
+
+  legendItem.append("text")
+    .attr("x", 18)
+    .attr("y", 10)
+    .style("font-size", "12px")
+    .style("alignment-baseline", "middle")
+    .text(d => d);
+
+  function updateRadar(year) {
+
+  // 1️⃣ Compute a shared max across BOTH countries
+  const maxThisYear = d3.max(
+    countries.flatMap(country =>
+      axes.map(axis => data[country][year]?.[axis] ?? 0)
+    )
+  ) || 1;
+
+  // 2️⃣ Build radar data using the shared max
+  const radarData = countries.map(country => ({
+    country,
+    values: axes.map(axis => ({
+      axis,
+      value: (data[country][year]?.[axis] ?? 0) / maxThisYear
+    }))
+  }));
+
+  const paths = svg.selectAll(".radar-area")
+    .data(radarData, d => d.country);
+
+  paths.enter()
+    .append("path")
+    .attr("class", "radar-area")
+    .attr("fill-opacity", 0.35)
+    .attr("stroke-width", 2)
+    .merge(paths)
+    .transition()
+    .duration(400)
+    .attr("d", d => radarLine(d.values))
+    .attr("fill", d => colors[d.country])
+    .attr("stroke", d => colors[d.country]);
+
+  paths.exit().remove();
+}
+
+
+  slider.on("input", function () {
+    const year = +this.value;
+    yearLabel.text(year);
+    updateRadar(year);
+  });
+
+  updateRadar(yearList[0]);
+}
 

@@ -337,10 +337,50 @@
 
     <!-- ================= COMPARISON TAB ================= -->
     <div class="tab-pane fade" id="comparison">
+
       <div class="chart-card">
-        <h3>Comparison (Coming Soon)</h3>
-        <p class="text-muted">This section can be used to compare multiple countries.</p>
+        <h3>Compare with another country</h3>
+
+        <div class="control-bar">
+          <input
+            id="compareSearch"
+            class="form-control"
+            style="max-width:300px"
+            placeholder="Type country name (e.g. Japan)"
+            list="countryList"
+          >
+          <button id="compareBtn" class="btn btn-primary btn-sm">
+            Compare
+          </button>
+        </div>
+
+        <datalist id="countryList"></datalist>
       </div>
+
+      <!-- Comparison Charts -->
+       
+      <div class="chart-card">
+        <button id="toggleEconomyBtn">
+          Switch to GDP Growth
+        </button>
+
+        <div id="compareGdpChart"></div>
+        <h3>GDP Comparison</h3>
+      </div>
+
+      <div class="chart-card">
+        <h3>Emission Comparison</h3>
+        <div id="radarChart-co2"></div>
+        <div style="width:900px;">
+        <label for="yearSlidercompare">
+          Year: <span id="yearLabelcompare"></span>
+        </label>
+        <input type="range" id="yearSlidercompare" step="1">
+      </div>
+
+        
+      </div>
+
     </div>
 
   </div>

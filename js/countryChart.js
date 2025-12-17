@@ -106,8 +106,6 @@ async function drawPopulationPyramid(countryName) {
 // ----------------------------
 
 function transformDataForHeatmap(file, countryName) {
-    console.log("file");
-    console.log(file);
     let pyramidData = []; 
     file.forEach(function(index) {
         // Find the country row within this dataset
@@ -126,8 +124,6 @@ function transformDataForHeatmap(file, countryName) {
 }
 
 function createHeatMap(countryData) {
-  console.log("countryDataa");
-  console.log(countryData);
   // Chuyển dữ liệu từ object -> array để dễ vẽ
     const data = [];
     countryData.forEach(d => {
@@ -257,8 +253,6 @@ function createHeatMap(countryData) {
 // ----------------------------
 
 function transformDataForPyramid(file, countryName, year) {
-    console.log("file");
-    console.log(file);
     return file
         .map(group => {
             const maleRow = group.male.find(
@@ -328,29 +322,29 @@ function initPyramidChart() {
     .attr("text-anchor", "middle")
     .text("Female");
   // ---- LEGEND (CREATE ONCE) ----
-  // const legend = wrapper.append("div")
-  //   .style("margin-top", "6px")
-  //   .style("font-size", "12px")
-  //   .style("display", "flex")
-  //   .style("justify-content", "center")
-  //   .style("gap", "12px");
+// const legend = wrapper.append("div")
+//   .style("margin-top", "6px")
+//   .style("font-size", "12px")
+//   .style("display", "flex")
+//   .style("justify-content", "center")
+//   .style("gap", "12px");
 
-  // const legendItem = legend.selectAll(".legend-item")
-  //   .data(PIE_CATEGORIES)
-  //   .enter()
-  //   .append("div")
-  //   .style("display", "flex")
-  //   .style("align-items", "center")
-  //   .style("gap", "4px");
+// const legendItem = legend.selectAll(".legend-item")
+//   .data(PIE_CATEGORIES)
+//   .enter()
+//   .append("div")
+//   .style("display", "flex")
+//   .style("align-items", "center")
+//   .style("gap", "4px");
 
-  // legendItem.append("span")
-  //   .style("width", "12px")
-  //   .style("height", "12px")
-  //   .style("display", "inline-block")
-  //   .style("background-color", d => color(d));
+// legendItem.append("span")
+//   .style("width", "12px")
+//   .style("height", "12px")
+//   .style("display", "inline-block")
+//   .style("background-color", d => color(d));
 
-  // legendItem.append("span")
-  //   .text(d => d);
+// legendItem.append("span")
+//   .text(d => d);
 
 }
 
@@ -452,176 +446,153 @@ document.getElementById("updateBtn-pyramid").addEventListener("click", () => {
 // ----------------------------
 // GDP chart
 // ----------------------------
-
 async function drawGDPChart(countryName) {
   const gdpDiv = d3.select("#gdpChart");
-  gdpDiv.selectAll("*").remove(); // clear
+  gdpDiv.selectAll("*").remove();
 
   try {
-    const currentGDP = await d3.csv("Dataset/Economy/Economy_GDP(current US$).csv");
-    const growthGDP = await d3.csv("Dataset/Economy/Economy_GDP growth (annual _).csv");
+    const gdpCSV = await d3.csv("Dataset/Economy/Economy_GDP(current US$).csv");
+    const growthCSV = await d3.csv("Dataset/Economy/Economy_GDP growth (annual _).csv");
 
-    const countryCurrentData = currentGDP.find(d => d["Country Name"] === countryName);
-    const countryGrowthGDP = growthGDP.find(d => d["Country Name"] === countryName);
+    const gdpRow = gdpCSV.find(d => d["Country Name"] === countryName);
+    const growthRow = growthCSV.find(d => d["Country Name"] === countryName);
 
-    if (!countryCurrentData && !countryGrowthGDP) {
-      gdpDiv.append("p").text("No GDP data found for this country.");
+    if (!gdpRow || !growthRow) {
+      gdpDiv.append("p").text("No GDP data available.");
       return;
     }
 
-    // Extract year-value pairs for both series
-    const gdpValues = Object.entries(countryCurrentData || {})
-      .filter(([k,v]) => /^\d{4}$/.test(k) && v !== "")
-      .map(([year, val]) => ({ year: +year, value: +val }))
-      .filter(d => !isNaN(d.value))
-      .sort((a,b) => a.year - b.year);
+    // ---------- Parse data ----------
+    const gdp = Object.entries(gdpRow)
+      .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
+      .map(([y, v]) => ({ year: +y, value: +v }))
+      .sort((a, b) => a.year - b.year);
 
-    const gdpGrowth = Object.entries(countryGrowthGDP || {})
-      .filter(([k,v]) => /^\d{4}$/.test(k) && v !== "")
-      .map(([year, val]) => ({ year: +year, value: +val }))
+    const growth = Object.entries(growthRow)
+      .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
+      .map(([y, v]) => ({ year: +y, value: +v }))
       .filter(d => !isNaN(d.value))
-      .sort((a,b) => a.year - b.year);
+      .sort((a, b) => a.year - b.year);
 
-    const margin = {top: 20, right: 70, bottom: 40, left: 70};
+    // ---------- Layout ----------
+    const margin = { top: 30, right: 80, bottom: 40, left: 80 };
     const width = 800 - margin.left - margin.right;
     const height = 400 - margin.top - margin.bottom;
-
-    // Create a container flex for chart + info blocks
-    const container = gdpDiv.append("div")
-      .style("display", "flex")
-      .style("margin", "7%");
-      
+    const bandSize = 10;   // % per band
+    const numBands = 2;    // 0–10, 10–20
 
     const svg = gdpDiv.append("svg")
       .attr("width", width + margin.left + margin.right)
-      .attr("height", height + margin.top + margin.bottom)
-      .append("g")
+      .attr("height", height + margin.top + margin.bottom);
+
+    const chart = svg.append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // X scale
+    // ---------- Scales ----------
     const x = d3.scaleLinear()
-      .domain(d3.extent(gdpValues, d => d.year))
+      .domain(d3.extent(gdp, d => d.year))
       .range([0, width]);
 
-    // Y scale left (current GDP)
-    const yLeft = d3.scaleLinear()
-      .domain([0, d3.max(gdpValues, d => d.value)])
+    const yGDP = d3.scaleLinear()
+      .domain([0, d3.max(gdp, d => d.value)])
       .nice()
       .range([height, 0]);
 
-    // Y scale right (GDP growth)
-    const yRight = d3.scaleLinear()
-      .domain([d3.min(gdpGrowth, d => d.value), d3.max(gdpGrowth, d => d.value)])
+    const yGrowth = d3.scaleLinear()
+      .domain(d3.extent(growth, d => d.value))
       .nice()
       .range([height, 0]);
 
-    // Axes
-    svg.append("g")
+    // Scale used ONLY for horizon band height
+    const bandScale = d3.scaleLinear()
+      .domain([0, bandSize])
+      .range([0, height / 2]);
+
+    // ---------- Axes ----------
+    chart.append("g")
       .attr("transform", `translate(0,${height})`)
       .call(d3.axisBottom(x).tickFormat(d3.format("d")));
 
-    svg.append("g")
-      .call(d3.axisLeft(yLeft).ticks(6).tickFormat(d3.format(".2s")));
+    chart.append("g")
+      .call(d3.axisLeft(yGDP).ticks(6).tickFormat(d3.format(".2s")));
 
-    svg.append("g")
+    chart.append("g")
       .attr("transform", `translate(${width},0)`)
-      .call(d3.axisRight(yRight).ticks(6));
+      .call(d3.axisRight(yGrowth).ticks(6));
 
-    // Line generators
-    const lineGDP = d3.line()
-      .x(d => x(d.year))
-      .y(d => yLeft(d.value))
-      .curve(d3.curveMonotoneX);
-
-    const lineGrowth = d3.line()
-      .x(d => x(d.year))
-      .y(d => yRight(d.value))
-      .curve(d3.curveMonotoneX);
-
-    // Draw lines
-    svg.append("path")
-      .datum(gdpValues)
+    // ---------- GDP line ----------
+    chart.append("path")
+      .datum(gdp)
       .attr("fill", "none")
-      .attr("stroke", "#f2e06fff")
+      .attr("stroke", "#4c78a8")
       .attr("stroke-width", 2.5)
-      .attr("d", lineGDP);
+      .attr("d", d3.line()
+        .x(d => x(d.year))
+        .y(d => yGDP(d.value))
+        .curve(d3.curveMonotoneX)
+      );
 
-    svg.append("path")
-      .datum(gdpGrowth)
-      .attr("fill", "none")
-      .attr("stroke", "#f9b793ff")
-      .attr("stroke-width", 2.5)
-      .attr("d", lineGrowth);
+    // ---------- Horizon graph ----------
+    const zeroY = yGrowth(0);
 
-    // Draw dots
-    svg.selectAll(".dotGDP")
-      .data(gdpValues)
-      .enter().append("circle")
-      .attr("class", "dotGDP")
-      .attr("cx", d => x(d.year))
-      .attr("cy", d => yLeft(d.value))
-      .attr("r", 3)
-      .attr("fill", "#f2e06fff");
+    chart.append("line")
+      .attr("x1", 0)
+      .attr("x2", width)
+      .attr("y1", zeroY)
+      .attr("y2", zeroY)
+      .attr("stroke", "#adb5bd");
 
-    svg.selectAll(".dotGrowth")
-      .data(gdpGrowth)
-      .enter().append("circle")
-      .attr("class", "dotGrowth")
-      .attr("cx", d => x(d.year))
-      .attr("cy", d => yRight(d.value))
-      .attr("r", 3)
-      .attr("fill", "#f9b793ff");
+    function drawHorizonBand(data, bandIndex, color, positive) {
+      const area = d3.area()
+        .x(d => x(d.year))
+        .y0(zeroY)
+        .y1(d => {
+          const raw = positive ? d.value : -d.value;
+          const bandValue = raw - bandIndex * bandSize;
+          const v = Math.max(0, Math.min(bandSize, bandValue));
+          const h = bandScale(v);
+          return positive ? zeroY - h : zeroY + h;
+        })
+        .curve(d3.curveMonotoneX);
 
-    // Labels
-    svg.append("text")
+      chart.append("path")
+        .datum(data)
+        .attr("fill", color)
+        .attr("opacity", 0.85)
+        .attr("d", area);
+    }
+
+    // Positive bands
+    drawHorizonBand(growth, 0, "#58c1f2", true);
+    drawHorizonBand(growth, 1, "#1f78b4", true);
+
+    // Negative bands
+    drawHorizonBand(growth, 0, "#e88a8a", false);
+    drawHorizonBand(growth, 1, "#ff0404", false);
+
+    // ---------- Labels ----------
+    chart.append("text")
       .attr("x", width / 2)
       .attr("y", height + 35)
       .attr("text-anchor", "middle")
       .text("Year");
 
-    svg.append("text")
+    chart.append("text")
       .attr("transform", "rotate(-90)")
       .attr("x", -height / 2)
-      .attr("y", -50)
+      .attr("y", -55)
       .attr("text-anchor", "middle")
       .text("GDP (current US$)");
 
-    svg.append("text")
+    chart.append("text")
       .attr("transform", "rotate(-90)")
       .attr("x", -height / 2)
-      .attr("y", width + 60)
+      .attr("y", width + 65)
       .attr("text-anchor", "middle")
-      .text("GDP Growth (annual %)");
-
-    // ======================
-    // Right: Info blocks
-    // ======================
-    const infoContainer = container.append("div")
-      .style("display", "flex")
-      .style("flex-direction", "column")
-      .style("gap", "20px")
-      .style("min-width", "180px");
-
-    // Latest GDP
-    const latestGDP = gdpValues[gdpValues.length - 1];
-    infoContainer.append("div")
-      .style("background", "#f9b793ff")
-      .style("padding", "15px")
-      .style("border-radius", "8px")
-      .style("text-align", "center")
-      .html(`<strong>GDP in ${latestGDP.year}</strong><br>${latestGDP.value.toLocaleString()} US$`);
-
-    // Latest GDP Growth
-    const latestGrowth = gdpGrowth[gdpGrowth.length - 1];
-    infoContainer.append("div")
-      .style("background", "#f2e06fff")
-      .style("padding", "15px")
-      .style("border-radius", "8px")
-      .style("text-align", "center")
-      .html(`<strong>GDP Growth in ${latestGDP.year}</strong><br>${latestGrowth.value.toFixed(2)} %`);
+      .text("GDP Growth (Horizon)");
 
   } catch (err) {
-    console.error("Error loading GDP data:", err);
+    console.error(err);
     gdpDiv.append("p").text("Failed to load GDP data.");
   }
 }
@@ -690,24 +661,18 @@ async function drawAgricultureChart(countryName){
       .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
       .map(([year, val]) => ({ year: +year, value: +val }))
       .filter(d => !isNaN(d.value))
-      .sort((a, b) => a.year - b.year);
-    // Merge crop & food by year
-    const mergedData = cropValues.map(d => {
-      const food = foodValues.find(f => f.year === d.year);
-      return food
-        ? { year: d.year, crop: d.value, food: food.value }
-        : null;
-    }).filter(d => d !== null);
+      .sort((a,b) => a.year - b.year);
 
-    // init svg
-    const margin = {top: 20, right: 200, bottom: 40, left: 70};
+    // ---------- Layout ----------
+    const margin = { top: 30, right: 80, bottom: 40, left: 80 };
     const width = 800 - margin.left - margin.right;
     const height = 400 - margin.top - margin.bottom;
 
     const svg = agriDiv.append("svg")
       .attr("width", width + margin.left + margin.right)
-      .attr("height", height + margin.top + margin.bottom)
-      .append("g")
+      .attr("height", height + margin.top + margin.bottom);
+
+    const chart = svg.append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
     // X scale (Year)
@@ -730,15 +695,15 @@ async function drawAgricultureChart(countryName){
       .nice()
       .range([height, 0]);
 
-    // Axes
-    svg.append("g")
+    // ---------- Axes ----------
+    chart.append("g")
       .attr("transform", `translate(0,${height})`)
       .call(d3.axisBottom(x).tickFormat(d3.format("d")));
 
     svg.append("g")
       .call(d3.axisLeft(yCrop).ticks(6));
 
-    svg.append("g")
+    chart.append("g")
       .attr("transform", `translate(${width},0)`)
       .call(d3.axisRight(yFood).ticks(6));
 

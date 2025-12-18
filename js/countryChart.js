@@ -561,12 +561,6 @@ async function drawGDPChart(countryName) {
   const gdpDiv = d3.select("#gdpChart");
   gdpDiv.selectAll("*").remove();
 
-  // Tooltip
-  const tooltip = d3.select("body")
-    .append("div")
-    .attr("class", "agri-tooltip")
-    .style("opacity", 0);
-
   try {
     const gdpCSV = await d3.csv("Dataset/Economy/Economy_GDP(current US$).csv");
     const growthCSV = await d3.csv("Dataset/Economy/Economy_GDP growth (annual _).csv");
@@ -624,13 +618,13 @@ async function drawGDPChart(countryName) {
     // ---------- Horizon baseline ----------
     const zeroY = yGrowth(0);
 
-    // Zero line
     chart.append("line")
       .attr("x1", 0)
       .attr("x2", width)
       .attr("y1", zeroY)
       .attr("y2", zeroY)
       .attr("stroke", "#adb5bd");
+
     function drawHorizonBand(data, color, positive) {
       const area = d3.area()
         .x(d => x(d.year))
@@ -671,38 +665,23 @@ async function drawGDPChart(countryName) {
       .attr("fill", "none")
       .attr("stroke", "#4c78a8")
       .attr("stroke-width", 2.5)
-      .attr("d", gdpLine);
+      .attr("d", d3.line()
+        .x(d => x(d.year))
+        .y(d => yGDP(d.value))
+        .curve(d3.curveMonotoneX)
+      );
 
-    // ---------- GDP dots + tooltip ----------
-    chart.selectAll(".gdp-dot")
-      .data(gdp)
-      .enter().append("circle")
-      .attr("class", "gdp-dot")
-      .attr("cx", d => x(d.year))
-      .attr("cy", d => yGDP(d.value))
-      .attr("r", 3)
-      .attr("fill", "#4c78a8")
-      .on("mouseover", (event, d) => {
-        tooltip
-          .style("opacity", 1)
-          .html(
-            `<strong>GDP</strong><br>
-             Year: ${d.year}<br>
-             Value: ${d3.format("$,.2s")(d.value)}`
-          );
-        d3.select(event.currentTarget).attr("r", 6);
-      })
-      .on("mousemove", event => {
-        tooltip
-          .style("left", event.pageX + 12 + "px")
-          .style("top", event.pageY - 28 + "px");
-      })
-      .on("mouseout", event => {
-        tooltip.style("opacity", 0);
-        d3.select(event.currentTarget).attr("r", 3);
-      });
+    const totalLength = gdpLinePath.node().getTotalLength();
 
-    // ---------- Labels ----------
+    gdpLinePath
+      .attr("stroke-dasharray", `${totalLength} ${totalLength}`)
+      .attr("stroke-dashoffset", totalLength)
+      .transition()
+      .duration(1200)
+      .ease(d3.easeCubicOut)
+      .attr("stroke-dashoffset", 0);
+
+    // ---------- Axis labels ----------
     chart.append("text")
       .attr("x", width / 2)
       .attr("y", height + 35)
@@ -773,7 +752,6 @@ async function drawGDPChart(countryName) {
     gdpDiv.append("p").text("Failed to load GDP data.");
   }
 }
-
 // ----------------------------
 // Agriculture chart
 // ----------------------------

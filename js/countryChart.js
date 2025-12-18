@@ -49,15 +49,59 @@ async function showCharts(countryName) {
     updateEmissionPieCharts(countryName, slider.value);
   });
 
-  // loadCountryList();
 }
 function updateAllComparisons(country1, country2, economyMode, prodMode) {
   compareEconomy(country1, country2, economyMode);
   compareProduction(country1, country2, prodMode);
 }
 
+// load country list
+async function loadCountryDropdown() {
+  const response = await fetch(
+    "Dataset/Agriculture/Agriculture and Rural development_Food production index (2014-2016 = 100).csv"
+  );
+  const text = await response.text();
+
+  const lines = text.split("\n");
+
+  // 🔧 FIX: remove quotes from headers
+  const headers = lines[0]
+    .split(",")
+    .map(h => h.replace(/"/g, "").trim());
+
+  const countryIndex = headers.indexOf("Country Name");
+
+  if (countryIndex === -1) {
+    console.error("Country Name column not found", headers);
+    return;
+  }
+
+  const countries = new Set();
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(",");
+    const country = cols[countryIndex]
+      ?.replace(/"/g, "")
+      ?.trim();
+
+    if (country) countries.add(country);
+  }
+
+  const select = document.getElementById("compareSearch");
+
+  [...countries].sort().forEach(country => {
+    const option = document.createElement("option");
+    option.value = country;
+    option.textContent = country;
+    select.appendChild(option);
+  });
+}
+
+loadCountryDropdown();
 
 
+// Gọi khi load trang
+loadCountryDropdown();
 
 document.getElementById("compareBtn").addEventListener("click", () => {
   const secondCountry = document.getElementById("compareSearch").value.trim();
@@ -65,12 +109,24 @@ document.getElementById("compareBtn").addEventListener("click", () => {
 
   lastComparedCountry = secondCountry;
   updateAllComparisons(countryName, secondCountry, economyMode, prodMode);
-  // compareEconomy(countryName, secondCountry, economyMode);
 
   drawEmissionRadar(countryName, secondCountry, "co2");
   drawEmissionRadar(countryName, secondCountry, "n2o");
   drawEmissionRadar(countryName, secondCountry, "ch4");
 });
+
+
+// document.getElementById("compareBtn").addEventListener("click", () => {
+//   const secondCountry = document.getElementById("compareSearch").value.trim();
+//   if (!secondCountry) return alert("Please select a country");
+
+//   lastComparedCountry = secondCountry;
+//   updateAllComparisons(countryName, secondCountry, economyMode, prodMode);
+
+//   drawEmissionRadar(countryName, secondCountry, "co2");
+//   drawEmissionRadar(countryName, secondCountry, "n2o");
+//   drawEmissionRadar(countryName, secondCountry, "ch4");
+// });
 
 document.getElementById("toggleEconomyBtn").addEventListener("click", function () {
   if (!lastComparedCountry) return;
@@ -255,7 +311,7 @@ function createHeatMap(countryData) {
         }
     });
 
-    const margin = { top: 50, right: 110, bottom: 50, left: 80 },
+    const margin = { top: 20, right: 110, bottom: 20, left: 80 },
           width = 860 - margin.left - margin.right,
           height = 400 - margin.top - margin.bottom;
 
@@ -355,7 +411,7 @@ function createHeatMap(countryData) {
         .call(legendAxis);
 
     legendGroup.append("text")
-    .attr("x", legendWidth / 2)
+    .attr("x", 5+legendWidth / 2)
     .attr("y", -10)
     .attr("text-anchor", "middle")
     .style("font-size", "12px")
@@ -394,7 +450,7 @@ function initPyramidChart() {
   const container = d3.select("#pyramidChart");
   container.selectAll("*").remove();
 
-  const margin = { top: 50, right: 30, bottom: 75, left: 40 };
+  const margin = { top: 30, right: 30, bottom: 45, left: 40 };
   width = 420 - margin.left - margin.right;
   height = 400 - margin.top - margin.bottom;
 
@@ -415,13 +471,6 @@ function initPyramidChart() {
   pyramidSvg.append("g")
     .attr("class", "y-axis");
 
-  // center line
-  // pyramidSvg.append("line")
-  //   .attr("class", "center-line")
-  //   .attr("y1", 0)
-  //   .attr("y2", height)
-  //   .attr("stroke", "#000");
-
   // labels
   pyramidSvg.append("text")
     .attr("class", "label male")
@@ -436,30 +485,6 @@ function initPyramidChart() {
     .attr("y", -5)
     .attr("text-anchor", "middle")
     .text("Female");
-  // ---- LEGEND (CREATE ONCE) ----
-// const legend = wrapper.append("div")
-//   .style("margin-top", "6px")
-//   .style("font-size", "12px")
-//   .style("display", "flex")
-//   .style("justify-content", "center")
-//   .style("gap", "12px");
-
-// const legendItem = legend.selectAll(".legend-item")
-//   .data(PIE_CATEGORIES)
-//   .enter()
-//   .append("div")
-//   .style("display", "flex")
-//   .style("align-items", "center")
-//   .style("gap", "4px");
-
-// legendItem.append("span")
-//   .style("width", "12px")
-//   .style("height", "12px")
-//   .style("display", "inline-block")
-//   .style("background-color", d => color(d));
-
-// legendItem.append("span")
-//   .text(d => d);
 
 }
 
@@ -819,7 +844,7 @@ async function drawAgricultureChart(countryName){
         : null;
     }).filter(d => d !== null);
     // init svg
-    const margin = {top: 20, right: 200, bottom: 40, left: 150};
+    const margin = {top: 20, right: 120, bottom: 40, left: 150};
     const width = 1000 - margin.left - margin.right;
     const height = 400 - margin.top - margin.bottom;
     const svg = agriDiv.append("svg")
@@ -1079,7 +1104,7 @@ async function drawEmissionChart(countryName, emissionType) {
   }
 
   // CHART SETUP
-  const margin = { top: 20, right: 120, bottom: 40, left: 60 };
+  const margin = { top: 20, right: 180, bottom: 40, left: 60 };
   const width = 1200 - margin.left - margin.right;
   const height = 400 - margin.top - margin.bottom;
 
@@ -1273,7 +1298,7 @@ async function initEmissionPieCharts(countryName) {
       .append("path")
       .attr("fill", d => color(d.data.category))
       .attr("stroke", "#fff")
-      .style("stroke-width", "2px")
+      .style("stroke-width", "0px")
       .each(function (d) { this._current = d; }); // store state
 
     pieCharts.push({
@@ -1554,8 +1579,8 @@ async function compareEconomy(countryA, countryB, economymode = "gdp") {
   const dataA = extract(rowA);
   const dataB = extract(rowB);
 
-  const margin = { top: 20, right: 40, bottom: 40, left: 70 };
-  const width = 700 - margin.left - margin.right;
+  const margin = { top: 20, right: 200, bottom: 40, left: 70 };
+  const width = 1000 - margin.left - margin.right;
   const height = 400 - margin.top - margin.bottom;
 
   /* ---------- INITIAL CREATE ---------- */
@@ -1599,7 +1624,7 @@ async function compareEconomy(countryA, countryB, economymode = "gdp") {
     // ---------- Legend ----------
     const legend = svg.append("g")
       .attr("class", "legend")
-      .attr("transform", `translate(${margin.left + 20}, ${margin.top - 10})`);
+      .attr("transform", `translate(${width + 40}, ${margin.top + 50})`);
     // Legend data for first country and second country
     const legendData = [
       { label: countryA, color: "#4e79a7", type: "line" },
@@ -1778,8 +1803,8 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
   const dataA = extract(rowA);
   const dataB = extract(rowB);
 
-  const margin = { top: 20, right: 40, bottom: 40, left: 70 };
-  const width = 700 - margin.left - margin.right;
+  const margin = { top: 20, right: 200, bottom: 40, left: 70 };
+  const width = 1000 - margin.left - margin.right;
   const height = 400 - margin.top - margin.bottom;
 
   /* ---------- INITIAL CREATE ---------- */
@@ -1828,7 +1853,7 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
     /* ---------- Legend ---------- */
     const legend = svg_prod.append("g")
       .attr("class", "legend")
-      .attr("transform", `translate(${20}, ${-10})`);
+      .attr("transform", `translate(${width + 40}, ${margin.top + 50})`);
 
     const legendData = [
       { label: countryA, color: "#4e79a7" },

@@ -752,6 +752,7 @@ async function drawGDPChart(countryName) {
     gdpDiv.append("p").text("Failed to load GDP data.");
   }
 }
+
 // ----------------------------
 // Agriculture chart
 // ----------------------------
@@ -781,13 +782,6 @@ function exponentialRegression(data) {
 async function drawAgricultureChart(countryName){
   const agriDiv = d3.select("#agricultureChart");
   agriDiv.selectAll("*").remove();
-
-  // Tooltip
-  const tooltip = d3.select("body")
-    .append("div")
-    .attr("class", "agri-tooltip")
-    .style("opacity", 0);
-
   try {
     const cropProductionData = await d3.csv(
       "Dataset/Agriculture/Agriculture and Rural development_Crop production index (2014-2016 = 100).csv"
@@ -795,188 +789,236 @@ async function drawAgricultureChart(countryName){
     const foodProductionData = await d3.csv(
       "Dataset/Agriculture/Agriculture and Rural development_Food production index (2014-2016 = 100).csv"
     );
-
     const countryCropData = cropProductionData.find(
       d => d["Country Name"] === countryName
     );
     const countryFoodData = foodProductionData.find(
       d => d["Country Name"] === countryName
     );
-
     if (!countryCropData && !countryFoodData) {
       agriDiv.append("p").text("No agriculture data found for this country.");
       return;
     }
-
     // Crop production values
     const cropValues = Object.entries(countryCropData || {})
       .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
       .map(([year, val]) => ({ year: +year, value: +val }))
       .filter(d => !isNaN(d.value))
       .sort((a, b) => a.year - b.year);
-
     // Food production values
     const foodValues = Object.entries(countryFoodData || {})
       .filter(([k, v]) => /^\d{4}$/.test(k) && v !== "")
       .map(([year, val]) => ({ year: +year, value: +val }))
       .filter(d => !isNaN(d.value))
       .sort((a, b) => a.year - b.year);
-
-    // SVG
-    const margin = { top: 20, right: 200, bottom: 40, left: 150 };
+    // Merge crop & food by year
+    const mergedData = cropValues.map(d => {
+      const food = foodValues.find(f => f.year === d.year);
+      return food
+        ? { year: d.year, crop: d.value, food: food.value }
+        : null;
+    }).filter(d => d !== null);
+    // init svg
+    const margin = {top: 20, right: 200, bottom: 40, left: 150};
     const width = 1000 - margin.left - margin.right;
     const height = 400 - margin.top - margin.bottom;
-
     const svg = agriDiv.append("svg")
       .attr("width", width + margin.left + margin.right)
       .attr("height", height + margin.top + margin.bottom)
       .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
-
-    // Scales
+    // X scale (Year)
     const x = d3.scaleLinear()
       .domain(d3.extent(cropValues, d => d.year))
       .range([0, width]);
-
+    // Y scale – Crop production (left)
     const yCrop = d3.scaleLinear()
       .domain([0, d3.max(cropValues, d => d.value)])
       .nice()
       .range([height, 0]);
-
+    // Y scale – Food production (right)
     const yFood = d3.scaleLinear()
-      .domain(d3.extent(foodValues, d => d.value))
+      .domain([
+        d3.min(foodValues, d => d.value),
+        d3.max(foodValues, d => d.value)
+      ])
       .nice()
       .range([height, 0]);
-
     // Axes
     svg.append("g")
       .attr("transform", `translate(0,${height})`)
       .call(d3.axisBottom(x).tickFormat(d3.format("d")));
-
-    svg.append("g").call(d3.axisLeft(yCrop).ticks(6));
-
+    svg.append("g")
+      .call(d3.axisLeft(yCrop).ticks(6));
     svg.append("g")
       .attr("transform", `translate(${width},0)`)
       .call(d3.axisRight(yFood).ticks(6));
-
-    // Lines
+    // Line generators
     const lineCrop = d3.line()
       .x(d => x(d.year))
       .y(d => yCrop(d.value))
       .curve(d3.curveMonotoneX);
-
     const lineFood = d3.line()
       .x(d => x(d.year))
       .y(d => yFood(d.value))
       .curve(d3.curveMonotoneX);
-
+    // Draw lines
     svg.append("path")
       .datum(cropValues)
       .attr("fill", "none")
       .attr("stroke", "#5A9CB5")
       .attr("stroke-width", 2.5)
       .attr("d", lineCrop);
-
     svg.append("path")
       .datum(foodValues)
       .attr("fill", "none")
       .attr("stroke", "#FA6868")
       .attr("stroke-width", 2.5)
       .attr("d", lineFood);
-
-    // === Crop dots + tooltip ===
+    // Draw dots
     svg.selectAll(".dotCrop")
       .data(cropValues)
       .enter().append("circle")
+      .attr("class", "dotCrop")
       .attr("cx", d => x(d.year))
       .attr("cy", d => yCrop(d.value))
       .attr("r", 3)
-      .attr("fill", "#5A9CB5")
-      .on("mouseover", (event, d) => {
-        tooltip
-          .style("opacity", 1)
-          .html(
-            `<strong>Crop Production</strong><br>
-             Year: ${d.year}<br>
-             Index: ${d.value.toFixed(1)}`
-          );
-        d3.select(event.currentTarget).attr("r", 6);
-      })
-      .on("mousemove", event => {
-        tooltip
-          .style("left", event.pageX + 12 + "px")
-          .style("top", event.pageY - 28 + "px");
-      })
-      .on("mouseout", event => {
-        tooltip.style("opacity", 0);
-        d3.select(event.currentTarget).attr("r", 3);
-      });
-
-    // === Food dots + tooltip ===
+      .attr("fill", "#5A9CB5");
     svg.selectAll(".dotFood")
       .data(foodValues)
       .enter().append("circle")
+      .attr("class", "dotFood")
       .attr("cx", d => x(d.year))
       .attr("cy", d => yFood(d.value))
       .attr("r", 3)
-      .attr("fill", "#FA6868")
-      .on("mouseover", (event, d) => {
-        tooltip
-          .style("opacity", 1)
-          .html(
-            `<strong>Food Production</strong><br>
-             Year: ${d.year}<br>
-             Index: ${d.value.toFixed(1)}`
-          );
-        d3.select(event.currentTarget).attr("r", 6);
-      })
-      .on("mousemove", event => {
-        tooltip
-          .style("left", event.pageX + 12 + "px")
-          .style("top", event.pageY - 28 + "px");
-      })
-      .on("mouseout", event => {
-        tooltip.style("opacity", 0);
-        d3.select(event.currentTarget).attr("r", 3);
-      });
-
+      .attr("fill", "#FA6868");
     // Labels
     svg.append("text")
       .attr("x", width / 2)
       .attr("y", height + 35)
       .attr("text-anchor", "middle")
       .text("Year");
-
     svg.append("text")
       .attr("transform", "rotate(-90)")
       .attr("x", -height / 2)
       .attr("y", -50)
       .attr("text-anchor", "middle")
       .text("Crop Production Index (2014–2016 = 100)");
-
     svg.append("text")
       .attr("transform", "rotate(-90)")
       .attr("x", -height / 2)
       .attr("y", width + 60)
       .attr("text-anchor", "middle")
       .text("Food Production Index (2014–2016 = 100)");
+    // Exponential regression
+    const cropReg = exponentialRegression(cropValues);
+    const foodReg = exponentialRegression(foodValues);
+    // Years range
+    const years = d3.range(
+      d3.min(cropValues, d => d.year),
+      d3.max(cropValues, d => d.year) + 1
+    );
+    // Regression curves
+    const cropRegCurve = cropReg
+      ? years.map(y => ({
+          year: y,
+          value: cropReg.a * Math.exp(cropReg.b * y)
+        }))
+      : [];
+    const foodRegCurve = foodReg
+      ? years.map(y => ({
+          year: y,
+          value: foodReg.a * Math.exp(foodReg.b * y)
+        }))
+      : [];
+    const lineCropReg = d3.line()
+      .x(d => x(d.year))
+      .y(d => yCrop(d.value))
+      .curve(d3.curveMonotoneX);
+    const lineFoodReg = d3.line()
+      .x(d => x(d.year))
+      .y(d => yFood(d.value))
+      .curve(d3.curveMonotoneX);
+    // Crop exponential regression
+    svg.append("path")
+      .datum(cropRegCurve)
+      .attr("fill", "none")
+      .attr("stroke", "#5A9CB5")
+      .attr("stroke-opacity", 0.8)
+      .attr("stroke-width", 2)
+      .attr("stroke-dasharray", "6,4")
+      .attr("d", lineCropReg);
+    // Food exponential regression
+    svg.append("path")
+      .datum(foodRegCurve)
+      .attr("fill", "none")
+      .attr("stroke", "#FA6868")
+      .attr("stroke-opacity", 0.8)
+      .attr("stroke-width", 2)
+      .attr("stroke-dasharray", "6,4")
+      .attr("d", lineFoodReg);
+    // ===== Legend =====
+    const legendData = [
+      { label: "Crop production", color: "#5A9CB5", dash: "0" },
+      { label: "Food production", color: "#FA6868", dash: "0" },
+      { label: "Crop exponential trend", color: "#5A9CB5", dash: "6,4" },
+      { label: "Food exponential trend", color: "#FA6868", dash: "6,4" }
+    ];
+    const legend = svg.append("g")
+      .attr("class", "legend")
+      .attr("transform", `translate(${60}, 10)`);
+    const legendItem = legend.selectAll(".legend-item")
+      .data(legendData)
+      .enter()
+      .append("g")
+      .attr("class", "legend-item")
+      .attr("transform", (d, i) => `translate(0, ${i * 20})`);
+    // Line symbol
+    legendItem.append("line")
+      .attr("x1", -40)
+      .attr("x2", -10)
+      .attr("y1", 0)
+      .attr("y2", 0)
+      .attr("stroke", d => d.color)
+      .attr("stroke-width", 2)
+      .attr("stroke-dasharray", d => d.dash);
+    // Text
+    legendItem.append("text")
+      .attr("x", -5)
+      .attr("y", 4)
+      .style("font-size", "12px")
+      .text(d => d.label);
+    legend.insert("rect", ":first-child")
+      .attr("x", -45)
+      .attr("y", -12)
+      .attr("width", 180)
+      .attr("height", legendData.length * 20 + 10)
+      .attr("fill", "#eee")
+      .attr("opacity", 0.4)
+      .attr("rx", 4);
 
-    // KPIs
-    const latestCrop = cropValues.at(-1);
-    const latestFood = foodValues.at(-1);
-    const prevFood = foodValues.at(-2);
+    // ===== Agriculture KPIs (right side) =====
+    const latestCrop = cropValues[cropValues.length - 1];
+    const latestFood = foodValues[foodValues.length - 1];
 
+    const prevCrop = cropValues[cropValues.length - 2];
+    const prevFood = foodValues[foodValues.length - 2];
+
+    // 1. Food production index
     document.getElementById("kpi-food-agri").textContent =
       latestFood ? latestFood.value.toFixed(1) : "N/A";
 
+    // 2. Crop production index
     document.getElementById("kpi-crop").textContent =
       latestCrop ? latestCrop.value.toFixed(1) : "N/A";
 
+    // 3. Agriculture growth (% – food index YoY)
     document.getElementById("kpi-agri-growth").textContent =
       latestFood && prevFood
         ? (((latestFood.value - prevFood.value) / prevFood.value) * 100).toFixed(2) + "%"
         : "N/A";
 
+    // 4. Gap between food & crop indices
     document.getElementById("kpi-agri-gap").textContent =
       latestFood && latestCrop
         ? (latestFood.value - latestCrop.value).toFixed(1)
@@ -1538,7 +1580,8 @@ async function compareEconomy(countryA, countryB, economymode = "gdp") {
       .y(d => y(d.value))
       .curve(d3.curveMonotoneX);
 
-    svg.append("g")
+    const xAxisG = svg.append("g")
+      .attr("class", "x-axis")
       .attr("transform", `translate(0,${height})`)
       .call(d3.axisBottom(x).tickFormat(d3.format("d")));
 
@@ -1598,12 +1641,13 @@ async function compareEconomy(countryA, countryB, economymode = "gdp") {
       .style("font-size", "12px")
       .text(d => d.label);
 
-    economyChart = { svg, x, y, line, pathA, pathB, yAxisG };
+    economyChart = { svg, x, y, line, pathA, pathB, xAxisG, yAxisG };
   }
 
   /* ---------- UPDATE WITH TRANSITION ---------- */
-  const { y, line, pathA, pathB, yAxisG } = economyChart;
-
+  const { svg, x, y, line, pathA, pathB, xAxisG, yAxisG } = economyChart;
+  // Update domains
+  x.domain(d3.extent([...dataA, ...dataB], d => d.year));
   y.domain([
     d3.min([...dataA, ...dataB], d => d.value),
     d3.max([...dataA, ...dataB], d => d.value)
@@ -1613,9 +1657,14 @@ async function compareEconomy(countryA, countryB, economymode = "gdp") {
     .duration(900)
     .ease(d3.easeCubicInOut);
 
+  // Axes
+  xAxisG.transition(t)
+    .call(d3.axisBottom(x).tickFormat(d3.format("d")));
+
   yAxisG.transition(t)
     .call(d3.axisLeft(y).ticks(6).tickFormat(tickFormat));
 
+  // Lines
   pathA.datum(dataA)
     .transition(t)
     .attr("d", line);
@@ -1623,7 +1672,14 @@ async function compareEconomy(countryA, countryB, economymode = "gdp") {
   pathB.datum(dataB)
     .transition(t)
     .attr("d", line);
-}
+
+  // Update legend country names
+  economyChart.svg
+    .selectAll(".legend-item text")
+    .data([countryA, countryB])
+    .text(d => d);
+  }
+
 const gasTitles = {
   co2: "CO₂ Emissions by Sector",
   n2o: "N₂O Emissions by Sector",
@@ -1729,7 +1785,7 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
   if (!economyChart.svg) {
     container.selectAll("*").remove();
 
-    const svg = container.append("svg")
+    const svg_prod = container.append("svg")
       .attr("width", width + margin.left + margin.right)
       .attr("height", height + margin.top + margin.bottom)
       .append("g")
@@ -1747,25 +1803,25 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
       .y(d => y(d.value))
       .curve(d3.curveMonotoneX);
 
-    svg.append("g")
+    const xAxisG = svg_prod.append("g")
+      .attr("class", "x-axis")
       .attr("transform", `translate(0,${height})`)
       .call(d3.axisBottom(x).tickFormat(d3.format("d")));
 
-    const yAxisG = svg.append("g");
-
-    const pathA = svg.append("path")
+    const yAxisG = svg_prod.append("g");
+    const pathA = svg_prod.append("path")
       .attr("fill", "none")
       .attr("stroke", "#4e79a7")
       .attr("stroke-width", 2.5);
 
-    const pathB = svg.append("path")
+    const pathB = svg_prod.append("path")
       .attr("fill", "none")
       .attr("stroke", "#e15759")
       .attr("stroke-width", 2.5);
 
-    prodChart = { svg, x, y, line, pathA, pathB, yAxisG };
+    // prodChart = { svg, x, y, line, pathA, pathB, yAxisG };
     // ---------- Legend ----------
-    const legend = svg.append("g")
+    const legend = svg_prod.append("g")
       .attr("class", "legend")
       .attr("transform", `translate(${margin.left + 20}, ${margin.top - 10})`);
     // Legend data for first country and second country
@@ -1809,10 +1865,16 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
       .style("font-size", "12px")
       .text(d => d.label);
 
+    prodChart = { svg_prod, x, y, line, pathA, pathB, xAxisG, yAxisG };
   }
 
   /* ---------- UPDATE WITH TRANSITION ---------- */
-  const { y, line, pathA, pathB, yAxisG } = prodChart;
+
+
+
+  const { svg_prod, x, y, line, pathA, pathB, xAxisG, yAxisG } = prodChart;
+  x.domain(d3.extent([...dataA, ...dataB], d => d.year));
+  
   y.domain([
     d3.min([...dataA, ...dataB], d => d.value),
     d3.max([...dataA, ...dataB], d => d.value)
@@ -1821,6 +1883,9 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
   const t = d3.transition()
     .duration(900)
     .ease(d3.easeCubicInOut);
+
+  xAxisG.transition(t)
+    .call(d3.axisBottom(x).tickFormat(d3.format("d")));
 
   yAxisG.transition(t)
     .call(d3.axisLeft(y).ticks(6).tickFormat(tickFormat));
@@ -1832,4 +1897,9 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
   pathB.datum(dataB)
     .transition(t)
     .attr("d", line);
-}
+
+  prodChart.svg_prod
+    .selectAll(".legend-item text")
+    .data([countryA, countryB])
+    .text(d => d);
+    }

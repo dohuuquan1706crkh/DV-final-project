@@ -24,11 +24,71 @@ let countriesData = [];
 
 d3.json(GEOJSON_URL).then(world => {
     countriesData = world.features;
+
+    const countryNames = [...new Set(
+        world.features
+            .map(d => d.properties.name)
+            .filter(Boolean)
+    )].sort(d3.ascending);
+
+    populateCountryDropdown(countryNames);
+
     drawMap(world);
 }).catch(err => {
     console.error('Failed to load GeoJSON:', err);
     svg.append('text').attr('x',20).attr('y',30).text('Failed to load w``orld GeoJSON');
 });
+
+function populateCountryDropdown(countryNames) {
+    const select = d3.select('#countryDropdown');
+
+    select.selectAll('option.country')
+        .data(countryNames)
+        .enter()
+        .append('option')
+        .attr('class', 'country')
+        .attr('value', d => d)
+        .text(d => d);
+
+    select.on('change', function () {
+        const selectedCountry = this.value;
+        if (!selectedCountry) return;
+
+        // Tìm feature của country
+        const feature = countriesData.find(
+            d => d.properties.name === selectedCountry
+        );
+        if (!feature) return;
+
+        zoomToFeature(feature);
+    });
+}
+
+function zoomToFeature(feature) {
+    const [[x0, y0], [x1, y1]] = path.bounds(feature);
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const x = (x0 + x1) / 2;
+    const y = (y0 + y1) / 2;
+
+    const scale = Math.max(
+        1,
+        Math.min(8, 0.9 / Math.max(dx / width, dy / height))
+    );
+
+    const translate = [
+        width / 2 - scale * x,
+        height / 2 - scale * y
+    ];
+
+    svg.transition()
+        .duration(750)
+        .call(
+            zoom.transform,
+            d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+        );
+}
+
 
 function drawMap(world) {
     g.selectAll('path')
@@ -236,6 +296,15 @@ const yAxisG = scatterSvg.append("g").attr("class", "y-axis");
 const titleG = scatterSvg.append("text").attr("class", "title");
 const defs = scatterSvg.append("defs");
 
+defs.append("clipPath")
+    .attr("id", "plot-clip")
+    .append("rect")
+    .attr("x", 80) //margin.left
+    .attr("y", 40) //margin.top
+    .attr("width", 1400 - 80 - 40) // width - margin.left - margin.right
+    .attr("height", 800 - 40 - 60); // height - margin.top - margin.bottom
+
+
 // linear regression settup
 const regressionLine = scatterG
     .append("line")
@@ -243,6 +312,7 @@ const regressionLine = scatterG
     .attr("stroke", "crimson")
     .attr("stroke-width", 2)
     .attr("stroke-dasharray", "6 4")
+    .attr("clip-path", "url(#plot-clip)")
     .attr("opacity", 0);
 
 

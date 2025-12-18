@@ -200,6 +200,26 @@
       font-weight: 700;
       margin-top: 6px;
     }
+        /* Keep radar charts in one row */
+    .radar-row {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 40px; /* pushes slider DOWN */
+    }
+
+    /* Force charts to occupy real height */
+    .radar-chart {
+      flex: 1;
+      min-width: 250px;
+      height: 320px;      /* MUST be set */
+      position: relative; /* prevents overlap issues */
+    }
+
+    /* Slider spacing */
+    .slider-container {
+      margin-top: 20px;
+      padding-top: 10px;
+    }
 
   </style>
 </head>
@@ -358,26 +378,40 @@
       </div>
 
       <!-- Comparison Charts -->
-       
       <div class="chart-card">
-        <button id="toggleEconomyBtn">
-          Switch to GDP Growth
-        </button>
-
-        <div id="compareGdpChart"></div>
         <h3>GDP Comparison</h3>
+
+            <button id="toggleEconomyBtn">
+              Switch to GDP Growth
+            </button>
+
+            <div id="compareGdpChart"></div>
+          </div>
+      <div class="chart-card">
+            <h3>Agriculture Comparison</h3>
+            <button id="toggleProdBtn">
+              Switch to Food Production
+            </button>
+
+            <div id="compareProdChart"></div>
+          </div>
+
+          <div class="chart-card">
+      <h3>Emission Comparison</h3>
+
+      <div class="radar-row">
+        <div class="radar-chart" id="radarChart-co2"></div>
+        <div class="radar-chart" id="radarChart-n2o"></div>
+        <div class="radar-chart" id="radarChart-ch4"></div>
       </div>
 
-      <div class="chart-card">
-        <h3>Emission Comparison</h3>
-        <div id="radarChart-co2"></div>
-        <div style="width:900px;">
+      <div class="slider-container">
         <label for="yearSlidercompare">
           Year: <span id="yearLabelcompare"></span>
         </label>
         <input type="range" id="yearSlidercompare" step="1">
       </div>
-
+    </div>
         
       </div>
 

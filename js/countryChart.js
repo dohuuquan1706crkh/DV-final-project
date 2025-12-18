@@ -3,6 +3,20 @@ const AGE_GROUPS = [
   "35-39","40-44","45-49","50-54","55-59","60-64","65-69",
   "70-74","75-79","80+"
 ];
+let allCountries = [];
+let primaryCountry = null;
+let compareCountry = null;
+let currentMode = "gdp";
+let lastComparedCountry = null;
+let economyChart = {
+  svg: null,
+  x: null,
+  y: null,
+  line: null,
+  pathA: null,
+  pathB: null,
+  yAxisG: null
+};
 
 const ctx = {};
 let pieCharts = []; // store references to each pie
@@ -33,8 +47,35 @@ async function showCharts(countryName) {
     updateEmissionPieCharts(countryName, slider.value);
   });
 
-
+  loadCountryList();
 }
+document.getElementById("compareBtn").addEventListener("click", () => {
+  const secondCountry = document.getElementById("compareSearch").value.trim();
+  let currentMode = "gdp";
+  if (!secondCountry) return alert("Please select a country");
+
+  lastComparedCountry = secondCountry;
+
+  compareEconomy(countryName, secondCountry, currentMode);
+
+  drawEmissionRadar(countryName, lastComparedCountry, "co2");
+
+});
+
+document.getElementById("toggleEconomyBtn").addEventListener("click", function () {
+  if (!lastComparedCountry) return;
+
+  currentMode = currentMode === "gdp" ? "growth" : "gdp";
+
+  this.textContent =
+    currentMode === "gdp"
+      ? "Switch to GDP Growth"
+      : "Switch to GDP";
+      
+  compareEconomy(countryName, lastComparedCountry, currentMode);
+
+
+});
 
 async function loadKPIs(countryName) {
   const YEAR = "2024";
@@ -200,7 +241,7 @@ function createHeatMap(countryData) {
     });
 
     const margin = { top: 50, right: 110, bottom: 50, left: 80 },
-          width = 800 - margin.left - margin.right,
+          width = 860 - margin.left - margin.right,
           height = 400 - margin.top - margin.bottom;
 
     const legendWidth = 20;
@@ -485,8 +526,13 @@ function updatePyramidData(pyramidData) {
 }
 
 document.getElementById("updateBtn-pyramid").addEventListener("click", () => {
+  const yearInput = document.getElementById("yearInput-pyramid");
   const raw = parseInt(document.getElementById("yearInput-pyramid").value);
-  const year = Number.isFinite(raw) ? raw : 2020;
+  const year = (Number.isFinite(raw) && raw >= 1960 && raw <= 2024) ? raw : 2020;
+
+  if (year !== raw) {
+    yearInput.value = year; // cập nhật input về giá trị mặc định
+  }
 
   const pyramidData = transformDataForPyramid(ctx.genderData, countryName, year);
   updatePyramidData(pyramidData);
@@ -531,10 +577,9 @@ async function drawGDPChart(countryName) {
       .sort((a, b) => a.year - b.year);
 
     // ---------- Layout ----------
-    const margin = { top: 30, right: 80, bottom: 40, left: 80 };
+    const margin = { top: 40, right: 280, bottom: 40, left: 80 };
     const width = 1200 - margin.left - margin.right;
     const height = 400 - margin.top - margin.bottom;
-    const bandSize = 10;
 
     const svg = gdpDiv.append("svg")
       .attr("width", width + margin.left + margin.right)
@@ -554,14 +599,14 @@ async function drawGDPChart(countryName) {
       .range([height, 0]);
 
     const yGrowth = d3.scaleLinear()
-      .domain(d3.extent(growth, d => d.value))
+      .domain([
+        Math.min(0, d3.min(growth, d => d.value)),
+        Math.max(0, d3.max(growth, d => d.value))
+      ])
       .nice()
       .range([height, 0]);
 
-    const bandScale = d3.scaleLinear()
-      .domain([0, bandSize])
-      .range([0, height / 2]);
-
+    // ---------- Horizon baseline ----------
     const zeroY = yGrowth(0);
 
     // Zero line
@@ -571,44 +616,25 @@ async function drawGDPChart(countryName) {
       .attr("y1", zeroY)
       .attr("y2", zeroY)
       .attr("stroke", "#adb5bd");
-
-    // ---------- Horizon band ----------
     function drawHorizonBand(data, color, positive) {
       const area = d3.area()
         .x(d => x(d.year))
         .y0(zeroY)
-        .y1(d => {
-          const raw = positive ? d.value : -d.value;
-          const v = Math.max(0, Math.min(bandSize, raw));
-          const h = bandScale(v);
-          return positive ? zeroY - h : zeroY + h;
-        })
+        .y1(d =>
+          positive
+            ? yGrowth(Math.max(0, d.value))
+            : yGrowth(Math.min(0, d.value))
+        )
         .curve(d3.curveMonotoneX);
 
       chart.append("path")
         .datum(data)
         .attr("fill", color)
         .attr("opacity", 0.85)
-        .attr("d", area)
-        .on("mousemove", (event) => {
-          const [mx] = d3.pointer(event);
-          const year = Math.round(x.invert(mx));
-          const d = growth.find(g => g.year === year);
-          if (!d) return;
-
-          tooltip
-            .style("opacity", 1)
-            .html(
-              `<strong>GDP Growth</strong><br>
-               Year: ${d.year}<br>
-               Growth: ${d.value.toFixed(2)} %`
-            )
-            .style("left", event.pageX + 12 + "px")
-            .style("top", event.pageY - 28 + "px");
-        })
-        .on("mouseout", () => tooltip.style("opacity", 0));
+        .attr("d", area);
     }
 
+    // Horizon bands
     drawHorizonBand(growth, "#b1e6ffff", true);
     drawHorizonBand(growth, "#f37171ff", false);
 
@@ -625,12 +651,7 @@ async function drawGDPChart(countryName) {
       .call(d3.axisRight(yGrowth).ticks(6));
 
     // ---------- GDP line ----------
-    const gdpLine = d3.line()
-      .x(d => x(d.year))
-      .y(d => yGDP(d.value))
-      .curve(d3.curveMonotoneX);
-
-    chart.append("path")
+    const gdpLinePath = chart.append("path")
       .datum(gdp)
       .attr("fill", "none")
       .attr("stroke", "#4c78a8")
@@ -686,6 +707,51 @@ async function drawGDPChart(countryName) {
       .attr("y", width + 65)
       .attr("text-anchor", "middle")
       .text("GDP Growth (Horizon)");
+
+    // ---------- Legend (right, outside plot) ----------
+    const legend = svg.append("g")
+      .attr("class", "legend")
+      .attr(
+        "transform",
+        `translate(${margin.left + width + 110}, ${margin.top + 100})`
+      );
+
+    const legendData = [
+      { label: "GDP (current US$)", color: "#4c78a8", type: "line" },
+      { label: "GDP Growth (Positive)", color: "#b1e6ffff", type: "rect" },
+      { label: "GDP Growth (Negative)", color: "#f37171ff", type: "rect" }
+    ];
+
+    const legendItem = legend.selectAll(".legend-item")
+      .data(legendData)
+      .enter()
+      .append("g")
+      .attr("class", "legend-item")
+      .attr("transform", (d, i) => `translate(0, ${i * 24})`);
+
+    legendItem.filter(d => d.type === "line")
+      .append("line")
+      .attr("x1", 0)
+      .attr("x2", 25)
+      .attr("y1", 8)
+      .attr("y2", 8)
+      .attr("stroke", d => d.color)
+      .attr("stroke-width", 3);
+
+    legendItem.filter(d => d.type === "rect")
+      .append("rect")
+      .attr("x", 0)
+      .attr("y", 2)
+      .attr("width", 25)
+      .attr("height", 12)
+      .attr("fill", d => d.color)
+      .attr("opacity", 0.85);
+
+    legendItem.append("text")
+      .attr("x", 35)
+      .attr("y", 12)
+      .style("font-size", "12px")
+      .text(d => d.label);
 
   } catch (err) {
     console.error(err);

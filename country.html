@@ -200,26 +200,6 @@
       font-weight: 700;
       margin-top: 6px;
     }
-        /* Keep radar charts in one row */
-    .radar-row {
-      display: flex;
-      gap: 24px;
-      margin-bottom: 40px; /* pushes slider DOWN */
-    }
-
-    /* Force charts to occupy real height */
-    .radar-chart {
-      flex: 1;
-      min-width: 250px;
-      height: 320px;      /* MUST be set */
-      position: relative; /* prevents overlap issues */
-    }
-
-    /* Slider spacing */
-    .slider-container {
-      margin-top: 20px;
-      padding-top: 10px;
-    }
 
   </style>
 </head>
@@ -354,67 +334,13 @@
       </div>
 
     </div>
-
+<!-- example of push on browser -->
     <!-- ================= COMPARISON TAB ================= -->
     <div class="tab-pane fade" id="comparison">
-
       <div class="chart-card">
-        <h3>Compare with another country</h3>
-
-        <div class="control-bar">
-          <input
-            id="compareSearch"
-            class="form-control"
-            style="max-width:300px"
-            placeholder="Type country name (e.g. Japan)"
-            list="countryList"
-          >
-          <button id="compareBtn" class="btn btn-primary btn-sm">
-            Compare
-          </button>
-        </div>
-
-        <datalist id="countryList"></datalist>
+        <h3>Comparison (Coming Soon)</h3>
+        <p class="text-muted">This section can be used to compare multiple countries.</p>
       </div>
-
-      <!-- Comparison Charts -->
-      <div class="chart-card">
-        <h3>GDP Comparison</h3>
-
-            <button id="toggleEconomyBtn">
-              Switch to GDP Growth
-            </button>
-
-            <div id="compareGdpChart"></div>
-          </div>
-      <div class="chart-card">
-            <h3>Agriculture Comparison</h3>
-            <button id="toggleProdBtn">
-              Switch to Food Production
-            </button>
-
-            <div id="compareProdChart"></div>
-          </div>
-
-          <div class="chart-card">
-      <h3>Emission Comparison</h3>
-
-      <div class="radar-row">
-        <div class="radar-chart" id="radarChart-co2"></div>
-        <div class="radar-chart" id="radarChart-n2o"></div>
-        <div class="radar-chart" id="radarChart-ch4"></div>
-      </div>
-
-      <div class="slider-container">
-        <label for="yearSlidercompare">
-          Year: <span id="yearLabelcompare"></span>
-        </label>
-        <input type="range" id="yearSlidercompare" step="1">
-      </div>
-    </div>
-        
-      </div>
-
     </div>
 
   </div>

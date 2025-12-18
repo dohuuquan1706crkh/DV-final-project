@@ -49,7 +49,7 @@ async function showCharts(countryName) {
     updateEmissionPieCharts(countryName, slider.value);
   });
 
-  loadCountryList();
+  // loadCountryList();
 }
 function updateAllComparisons(country1, country2, economyMode, prodMode) {
   compareEconomy(country1, country2, economyMode);
@@ -1744,9 +1744,10 @@ const emissionConfig = {
     }
   ],
 };
+let prodChart = null;
 
 async function compareProduction(countryA, countryB, prodmode = "crop") {
-  const container = d3.select("#compareProdChart");
+  const container_prod = d3.select("#compareProdChart");
 
   const config_prod = {
     crop: {
@@ -1782,10 +1783,11 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
   const height = 400 - margin.top - margin.bottom;
 
   /* ---------- INITIAL CREATE ---------- */
-  if (!economyChart.svg) {
-    container.selectAll("*").remove();
+  // let prodChart=null
+  if (!prodChart) {
+    container_prod.selectAll("*").remove();
 
-    const svg_prod = container .append("svg")
+    const svg_prod = container_prod.append("svg")
       .attr("width", width + margin.left + margin.right)
       .attr("height", height + margin.top + margin.bottom)
       .append("g")
@@ -1809,6 +1811,7 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
       .call(d3.axisBottom(x).tickFormat(d3.format("d")));
 
     const yAxisG = svg_prod.append("g");
+
     const pathA = svg_prod.append("path")
       .attr("fill", "none")
       .attr("stroke", "#4e79a7")
@@ -1819,16 +1822,17 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
       .attr("stroke", "#e15759")
       .attr("stroke-width", 2.5);
 
-    // prodChart = { svg, x, y, line, pathA, pathB, yAxisG };
-    // ---------- Legend ----------
+    // ✅ Store everything
+    prodChart = { svg_prod, x, y, line, pathA, pathB, xAxisG, yAxisG };
+
+    /* ---------- Legend ---------- */
     const legend = svg_prod.append("g")
       .attr("class", "legend")
-      .attr("transform", `translate(${margin.left + 20}, ${margin.top - 10})`);
-    // Legend data for first country and second country
+      .attr("transform", `translate(${20}, ${-10})`);
+
     const legendData = [
-      { label: countryA, color: "#4e79a7", type: "line" },
-      { label: countryB, color: "#e15759", type: "line" }
-      
+      { label: countryA, color: "#4e79a7" },
+      { label: countryB, color: "#e15759" }
     ];
 
     const legendItem = legend.selectAll(".legend-item")
@@ -1838,9 +1842,7 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
       .attr("class", "legend-item")
       .attr("transform", (d, i) => `translate(0, ${i * 20})`);
 
-    // Line symbol
-    legendItem.filter(d => d.type === "line")
-      .append("line")
+    legendItem.append("line")
       .attr("x1", 0)
       .attr("x2", 25)
       .attr("y1", 8)
@@ -1848,25 +1850,13 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
       .attr("stroke", d => d.color)
       .attr("stroke-width", 3);
 
-    // Rectangle symbol
-    legendItem.filter(d => d.type === "rect")
-      .append("rect")
-      .attr("x", 0)
-      .attr("y", 2)
-      .attr("width", 25)
-      .attr("height", 12)
-      .attr("fill", d => d.color)
-      .attr("opacity", 0.85);
-
-    // Text labels
     legendItem.append("text")
       .attr("x", 35)
       .attr("y", 12)
       .style("font-size", "12px")
       .text(d => d.label);
-
-    prodChart = { svg_prod, x, y, line, pathA, pathB, xAxisG, yAxisG };
   }
+
 
   /* ---------- UPDATE WITH TRANSITION ---------- */
 
@@ -1898,7 +1888,7 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
     .transition(t)
     .attr("d", line);
 
-  prodChart.svg
+  prodChart.svg_prod
     .selectAll(".legend-item text")
     .data([countryA, countryB])
     .text(d => d);

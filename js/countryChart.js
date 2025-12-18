@@ -1785,7 +1785,7 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
   if (!economyChart.svg) {
     container.selectAll("*").remove();
 
-    const svg_prod = container.append("svg")
+    const svg_prod = container .append("svg")
       .attr("width", width + margin.left + margin.right)
       .attr("height", height + margin.top + margin.bottom)
       .append("g")
@@ -1898,7 +1898,7 @@ async function compareProduction(countryA, countryB, prodmode = "crop") {
     .transition(t)
     .attr("d", line);
 
-  prodChart.svg_prod
+  prodChart.svg
     .selectAll(".legend-item text")
     .data([countryA, countryB])
     .text(d => d);
